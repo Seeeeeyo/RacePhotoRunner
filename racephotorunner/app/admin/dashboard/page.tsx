@@ -1,13 +1,30 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 
+// Type definition for activity item
+interface ActivityItem {
+  type: string;
+  description: string;
+  timestamp: string;
+  event_id?: number;
+  photo_id?: number;
+}
+
 export default function AdminDashboard() {
   const { isAuthenticated, isLoading, isAdmin, user, logout } = useAuth();
   const router = useRouter();
+  const [stats, setStats] = useState({
+    totalEvents: 0,
+    totalPhotos: 0,
+    searchesToday: 0,
+  });
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
+  const [isLoadingActivities, setIsLoadingActivities] = useState(true);
 
   useEffect(() => {
     // Only admin users should access this page
@@ -15,6 +32,85 @@ export default function AdminDashboard() {
       router.push('/signin?redirect=/admin/dashboard');
     }
   }, [isLoading, isAuthenticated, isAdmin, router]);
+
+  useEffect(() => {
+    // Fetch stats from API
+    if (isAuthenticated && isAdmin) {
+      const fetchStats = async () => {
+        try {
+          setIsLoadingStats(true);
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/admin/stats`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              // Temporarily disable auth for development
+              // 'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            setStats({
+              totalEvents: data.total_events || 0,
+              totalPhotos: data.total_photos || 0,
+              searchesToday: data.searches_today || 0,
+            });
+          } else {
+            console.error('Failed to fetch statistics');
+          }
+        } catch (error) {
+          console.error('Error fetching statistics:', error);
+        } finally {
+          setIsLoadingStats(false);
+        }
+      };
+      
+      const fetchActivity = async () => {
+        try {
+          setIsLoadingActivities(true);
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/admin/recent-activity`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              // Temporarily disable auth for development
+              // 'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            setActivities(data);
+          } else {
+            console.error('Failed to fetch activity');
+          }
+        } catch (error) {
+          console.error('Error fetching activity:', error);
+        } finally {
+          setIsLoadingActivities(false);
+        }
+      };
+      
+      fetchStats();
+      fetchActivity();
+    }
+  }, [isAuthenticated, isAdmin]);
+
+  // Helper function to format timestamps
+  const formatTime = (timestamp: string): string => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    
+    return date.toLocaleDateString();
+  };
 
   if (isLoading) {
     return (
@@ -156,15 +252,33 @@ export default function AdminDashboard() {
               <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
                 <div className="px-4 py-5 bg-gray-50 shadow rounded-lg overflow-hidden sm:p-6">
                   <dt className="text-sm font-medium text-gray-500 truncate">Total Events</dt>
-                  <dd className="mt-1 text-3xl font-semibold text-gray-900">2</dd>
+                  <dd className="mt-1 text-3xl font-semibold text-gray-900">
+                    {isLoadingStats ? (
+                      <div className="h-8 w-16 bg-gray-200 animate-pulse rounded"></div>
+                    ) : (
+                      stats.totalEvents
+                    )}
+                  </dd>
                 </div>
                 <div className="px-4 py-5 bg-gray-50 shadow rounded-lg overflow-hidden sm:p-6">
                   <dt className="text-sm font-medium text-gray-500 truncate">Total Photos</dt>
-                  <dd className="mt-1 text-3xl font-semibold text-gray-900">167</dd>
+                  <dd className="mt-1 text-3xl font-semibold text-gray-900">
+                    {isLoadingStats ? (
+                      <div className="h-8 w-16 bg-gray-200 animate-pulse rounded"></div>
+                    ) : (
+                      stats.totalPhotos
+                    )}
+                  </dd>
                 </div>
                 <div className="px-4 py-5 bg-gray-50 shadow rounded-lg overflow-hidden sm:p-6">
                   <dt className="text-sm font-medium text-gray-500 truncate">Searches Today</dt>
-                  <dd className="mt-1 text-3xl font-semibold text-gray-900">24</dd>
+                  <dd className="mt-1 text-3xl font-semibold text-gray-900">
+                    {isLoadingStats ? (
+                      <div className="h-8 w-16 bg-gray-200 animate-pulse rounded"></div>
+                    ) : (
+                      stats.searchesToday
+                    )}
+                  </dd>
                 </div>
               </div>
             </div>
@@ -175,41 +289,40 @@ export default function AdminDashboard() {
             <div className="px-4 py-5 sm:p-6">
               <h3 className="text-lg leading-6 font-medium text-gray-900">Recent Activity</h3>
               <div className="mt-5">
-                <ul className="divide-y divide-gray-200">
-                  <li className="py-4">
-                    <div className="flex space-x-3">
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-medium">Photos uploaded</h3>
-                          <p className="text-sm text-gray-500">1 hour ago</p>
+                {isLoadingActivities ? (
+                  <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="animate-pulse flex space-x-4">
+                        <div className="flex-1 space-y-2 py-1">
+                          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                          <div className="h-4 bg-gray-200 rounded w-5/6"></div>
                         </div>
-                        <p className="text-sm text-gray-500">45 new photos uploaded to Boston Marathon 2024</p>
                       </div>
-                    </div>
-                  </li>
-                  <li className="py-4">
-                    <div className="flex space-x-3">
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-medium">New event created</h3>
-                          <p className="text-sm text-gray-500">3 hours ago</p>
+                    ))}
+                  </div>
+                ) : activities.length > 0 ? (
+                  <ul className="divide-y divide-gray-200">
+                    {activities.map((activity, index) => (
+                      <li key={index} className="py-4">
+                        <div className="flex space-x-3">
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-sm font-medium">
+                                {activity.type === 'photo_upload' ? 'Photos uploaded' : 
+                                 activity.type === 'event_created' ? 'New event created' :
+                                 'Activity'}
+                              </h3>
+                              <p className="text-sm text-gray-500">{formatTime(activity.timestamp)}</p>
+                            </div>
+                            <p className="text-sm text-gray-500">{activity.description}</p>
+                          </div>
                         </div>
-                        <p className="text-sm text-gray-500">NYC Half Marathon event was created</p>
-                      </div>
-                    </div>
-                  </li>
-                  <li className="py-4">
-                    <div className="flex space-x-3">
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-medium">Photos downloaded</h3>
-                          <p className="text-sm text-gray-500">Yesterday</p>
-                        </div>
-                        <p className="text-sm text-gray-500">12 photos were downloaded by users</p>
-                      </div>
-                    </div>
-                  </li>
-                </ul>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-gray-500 py-4">No recent activity to display</p>
+                )}
               </div>
             </div>
           </div>
