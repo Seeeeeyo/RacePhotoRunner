@@ -113,6 +113,29 @@
 
 ---
 
+## 🕶️ Invisible Watermarking for HD Photos
+
+### [ ] Integrate Invisible Watermarking
+- [ ] Add invisible watermarking to HD photos before user download.
+- [ ] Encode traceable metadata directly into the image:
+  - Photo ID
+  - Photographer ID
+  - Buyer user ID or email
+  - Purchase timestamp
+
+#### 🧰 Commercial Options:
+- [ ] **Digimarc** — Industry-grade invisible watermarking and copyright tracking.
+- [ ] **Imatag** — SaaS for imperceptible watermarking used by photo agencies.
+
+#### 🧪 Open-Source Options:
+- [ ] [`invisible-watermark`](https://github.com/guofei9987/invisible-watermark) — Python, supports DCT/DFT-based embedding.
+- [ ] Explore simple `steganography` libraries (note: easier to reverse or remove).
+
+### [ ] Create Decode Script
+- [ ] Utility to extract and verify watermark from images for traceability in case of leaks.
+
+----
+
 ### 🔁 User Feedback & Support
 - [ ] Add "Report photo" feature
 - [ ] Photographer + athlete FAQ / support pages

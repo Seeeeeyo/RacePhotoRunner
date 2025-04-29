@@ -1,15 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Response
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Response, Body
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from fastapi.responses import FileResponse
 import os
 from PIL import Image, ImageDraw, ImageFont
 import io
+import json
 
 from app.database import get_db
 from app.schemas.photo import Photo, PhotoCreate, PhotoUpdate, PhotoSummary, PhotoSearchResult
 from app.utils.auth import get_current_active_user, get_current_admin_user
 from app.utils.file import save_upload_file, is_valid_image
+from app.utils.bib_detection import bib_detector
 
 router = APIRouter(prefix="/photos", tags=["photos"])
 
@@ -76,12 +78,17 @@ async def upload_photo(
     import shutil
     shutil.copy(file_path, f"uploads/thumbnails/{photo_filename}")
     
+    # Detect bib numbers using Gemini
+    detected_bibs = await bib_detector.detect_bib_numbers(file_path)
+    bib_numbers = ','.join(map(str, detected_bibs)) if detected_bibs else None
+    
     # Create database record
     new_photo = PhotoModel(
         event_id=event_id,
         filename=photo.filename,
         path=photo_path,
         thumbnail_path=thumbnail_path,
+        bib_numbers=bib_numbers,
         is_public=True
     )
     
@@ -262,3 +269,190 @@ async def get_watermarked_photo(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error applying watermark: {str(e)}")
+
+
+@router.patch("/{photo_id}", response_model=Photo)
+async def update_photo(
+    photo_id: int,
+    photo_update: PhotoUpdate,
+    # Temporarily comment out auth for development
+    # current_user = Depends(get_current_admin_user),  # Require admin permissions
+    db: Session = Depends(get_db)
+):
+    """
+    Update a photo's metadata (admin only) - Auth temporarily disabled for development
+    """
+    from app.models.photo import Photo as PhotoModel
+    
+    # Get the photo from database
+    photo = db.query(PhotoModel).filter(PhotoModel.id == photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    
+    # Update fields if provided in the request
+    if photo_update.bib_numbers is not None:
+        photo.bib_numbers = photo_update.bib_numbers
+    
+    if photo_update.event_id is not None:
+        photo.event_id = photo_update.event_id
+    
+    if photo_update.has_face is not None:
+        photo.has_face = photo_update.has_face
+    
+    if photo_update.face_embedding_path is not None:
+        photo.face_embedding_path = photo_update.face_embedding_path
+    
+    if photo_update.body_embedding_path is not None:
+        photo.body_embedding_path = photo_update.body_embedding_path
+    
+    if photo_update.photo_metadata is not None:
+        photo.photo_metadata = json.dumps(photo_update.photo_metadata)
+    
+    if photo_update.timestamp is not None:
+        photo.timestamp = photo_update.timestamp
+    
+    if photo_update.is_public is not None:
+        photo.is_public = photo_update.is_public
+    
+    # Save changes to database
+    try:
+        db.commit()
+        db.refresh(photo)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating photo: {str(e)}")
+    
+    # Return updated photo
+    return {
+        "id": photo.id,
+        "event_id": photo.event_id,
+        "filename": photo.filename,
+        "path": photo.path,
+        "thumbnail_path": photo.thumbnail_path,
+        "bib_numbers": photo.bib_numbers,
+        "has_face": photo.has_face,
+        "face_embedding_path": photo.face_embedding_path,
+        "body_embedding_path": photo.body_embedding_path,
+        "metadata": photo.photo_metadata,
+        "timestamp": photo.timestamp.isoformat() if photo.timestamp else None,
+        "is_public": photo.is_public,
+        "created_at": photo.created_at.isoformat() if photo.created_at else None,
+        "updated_at": photo.updated_at.isoformat() if photo.updated_at else None
+    }
+
+
+@router.post("/{photo_id}/untag", status_code=200)
+async def untag_photo(
+    photo_id: int,
+    bib_data: dict = Body(...),
+    # Temporarily comment out auth for development
+    # current_user = Depends(get_current_admin_user),  # Require admin permissions
+    db: Session = Depends(get_db)
+):
+    """
+    Remove a specific bib number from a photo (admin only) - Auth temporarily disabled for development
+    """
+    from app.models.photo import Photo as PhotoModel
+    
+    # Get the photo from database
+    photo = db.query(PhotoModel).filter(PhotoModel.id == photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    
+    # Get the bib number to remove
+    bib_number = bib_data.get("bib_number")
+    if not bib_number:
+        raise HTTPException(status_code=400, detail="Bib number is required")
+    
+    # If photo has no bib numbers, nothing to remove
+    if not photo.bib_numbers:
+        return {"message": "Photo has no bib numbers"}
+    
+    # Convert comma-separated string to list
+    bib_list = photo.bib_numbers.split(",")
+    
+    # Remove the specified bib number if it exists
+    if bib_number in bib_list:
+        bib_list.remove(bib_number)
+        # Convert back to comma-separated string or None if empty
+        photo.bib_numbers = ",".join(bib_list) if bib_list else None
+        
+        # Save changes to database
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Error updating photo: {str(e)}")
+        
+        return {"message": f"Bib number {bib_number} removed from photo {photo_id}"}
+    else:
+        return {"message": f"Bib number {bib_number} not found in photo {photo_id}"}
+
+
+@router.post("/reports/untag", status_code=201)
+async def report_untag(
+    report_data: dict = Body(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Report an incorrect bib tag for admin review (public endpoint)
+    """
+    # Extract report data
+    photo_id = report_data.get("photo_id")
+    bib_number = report_data.get("bib_number")
+    reason = report_data.get("reason", "Not provided")
+    
+    if not photo_id or not bib_number:
+        raise HTTPException(status_code=400, detail="Photo ID and bib number are required")
+    
+    # Log the report (in a production app, you would save to database)
+    import logging
+    logger = logging.getLogger("api")
+    logger.info(f"Untag report received - Photo ID: {photo_id}, Bib: {bib_number}, Reason: {reason}")
+    
+    # Return confirmation
+    return {"message": "Report received and will be reviewed by an admin"}
+
+
+@router.delete("/{photo_id}", status_code=200)
+async def delete_photo(
+    photo_id: int,
+    # Temporarily comment out auth for development
+    # current_user = Depends(get_current_admin_user),  # Require admin permissions
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a photo (admin only) - Auth temporarily disabled for development
+    """
+    from app.models.photo import Photo as PhotoModel
+    
+    # Get the photo from database
+    photo = db.query(PhotoModel).filter(PhotoModel.id == photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    
+    # Get file paths to delete from disk
+    file_paths = []
+    if photo.path:
+        file_paths.append(os.path.join(os.getcwd(), photo.path.lstrip('/')))
+    if photo.thumbnail_path:
+        file_paths.append(os.path.join(os.getcwd(), photo.thumbnail_path.lstrip('/')))
+    
+    # Delete from database first
+    try:
+        db.delete(photo)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting photo from database: {str(e)}")
+    
+    # Then attempt to delete files from disk
+    for path in file_paths:
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except Exception as e:
+                # Log error but continue (don't fail if files can't be deleted)
+                print(f"Warning: Could not delete file {path}: {str(e)}")
+    
+    return {"message": f"Photo {photo_id} successfully deleted"}

@@ -5,9 +5,17 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { fetchEvent, fetchEventPhotos, Event, Photo } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { showAlert, showConfirm, showToast } from '@/lib/popup';
 
 // Get the API base URL from environment
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+// Function to build API URL
+function buildApiUrl(path: string): string {
+  const normalizedPath = path.startsWith('/') ? path.substring(1) : path;
+  return `${API_BASE_URL}/api/${normalizedPath}`;
+}
 
 // Function to create a full URL for image paths
 function getFullImageUrl(path: string): string {
@@ -47,6 +55,7 @@ function Watermark({ children }: { children: React.ReactNode }) {
 
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { isAdmin, getAuthHeaders } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,6 +63,47 @@ export default function EventDetailPage() {
     bibNumber: "",
   });
   const [filteredPhotos, setFilteredPhotos] = useState<Photo[]>([]);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
+
+  // Function to handle photo navigation
+  const handlePhotoNavigation = (direction: 'prev' | 'next') => {
+    if (selectedPhotoIndex === null) return;
+    
+    const newIndex = direction === 'next' 
+      ? (selectedPhotoIndex + 1) % filteredPhotos.length
+      : (selectedPhotoIndex - 1 + filteredPhotos.length) % filteredPhotos.length;
+    
+    setSelectedPhotoIndex(newIndex);
+  };
+
+  // Function to handle keyboard navigation
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (!isViewerOpen) return;
+      
+      if (e.key === 'ArrowRight') handlePhotoNavigation('next');
+      if (e.key === 'ArrowLeft') handlePhotoNavigation('prev');
+      if (e.key === 'Escape') setIsViewerOpen(false);
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [isViewerOpen, selectedPhotoIndex, filteredPhotos.length]);
+
+  // Effect to handle body scroll lock
+  useEffect(() => {
+    if (isViewerOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    // Cleanup function to reset overflow when component unmounts
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isViewerOpen]);
 
   useEffect(() => {
     const loadEventData = async () => {
@@ -133,6 +183,134 @@ export default function EventDetailPage() {
         document.body.removeChild(a);
       })
       .catch(error => console.error('Error downloading image:', error));
+  };
+
+  // Function to handle untagging request
+  const handleUntag = async (photoId: number, bibNumber: string) => {
+    try {
+      // If admin, directly update the database
+      if (isAdmin) {
+        // NOTE: Auth temporarily disabled on the server, so we don't need to send auth headers
+        const authHeaders = getAuthHeaders() || {};
+        
+        // Use the dedicated untag endpoint
+        const response = await fetch(buildApiUrl(`photos/${photoId}/untag`), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // Auth temporarily disabled on server
+            // ...authHeaders
+          },
+          body: JSON.stringify({ bib_number: bibNumber })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Error untagging: ${response.status} - ${await response.text()}`);
+        }
+        
+        // Update UI: remove the bib number from the photo
+        setPhotos(prev => 
+          prev.map(photo => 
+            photo.id === photoId 
+              ? { 
+                  ...photo, 
+                  bib_numbers: photo.bib_numbers ? photo.bib_numbers.filter(bib => bib !== bibNumber) : null 
+                } 
+              : photo
+          )
+        );
+        
+        setFilteredPhotos(prev => 
+          prev.map(photo => 
+            photo.id === photoId 
+              ? { 
+                  ...photo, 
+                  bib_numbers: photo.bib_numbers ? photo.bib_numbers.filter(bib => bib !== bibNumber) : null 
+                } 
+              : photo
+          )
+        );
+        
+        showToast(`Removed Bib #${bibNumber} tag from photo.`, 'success');
+      } else {
+        // For regular users, send an untag report
+        console.log(`Request to untag Photo ID: ${photoId} from Bib: ${bibNumber}`);
+        
+        const response = await fetch(buildApiUrl(`photos/reports/untag`), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ 
+            photo_id: photoId, 
+            bib_number: bibNumber,
+            reason: "User reported incorrect tag"
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Error reporting untag: ${response.status} - ${await response.text()}`);
+        }
+        
+        showToast(`Untag request sent for Bib #${bibNumber}. This will be reviewed by an admin.`, 'info');
+      }
+    } catch (error) {
+      console.error("Failed to untag/report:", error);
+      showAlert("Error", "Failed to process your request. Please try again.", 'error');
+    }
+  };
+
+  // Function to handle photo deletion (admin only)
+  const handleDeletePhoto = async (photoId: number) => {
+    if (!isAdmin) {
+      showAlert("Access Denied", "Only admins can delete photos.", 'error');
+      return;
+    }
+    
+    showConfirm(
+      "Delete Photo",
+      `Are you sure you want to delete photo ID: ${photoId}? This cannot be undone.`,
+      async () => {
+        try {
+          const authHeaders = getAuthHeaders() || {};
+          
+          const response = await fetch(buildApiUrl(`photos/${photoId}`), {
+            method: 'DELETE',
+            headers: {
+              // Auth temporarily disabled on server
+              // ...authHeaders
+            }
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Error deleting photo: ${response.status} - ${await response.text()}`);
+          }
+          
+          // Update UI state upon successful deletion
+          setPhotos(prev => prev.filter(p => p.id !== photoId));
+          setFilteredPhotos(prev => prev.filter(p => p.id !== photoId));
+          
+          // If deleting from viewer, close it or navigate
+          if (isViewerOpen && selectedPhotoIndex !== null) {
+            if (filteredPhotos.length <= 1) {
+              // No more photos to view, close the viewer
+              setIsViewerOpen(false);
+            } else if (photoId === filteredPhotos[selectedPhotoIndex].id) {
+              // Deleted the current photo, navigate to the next one or previous if last
+              const newIndex = selectedPhotoIndex === filteredPhotos.length - 1 
+                ? selectedPhotoIndex - 1 
+                : selectedPhotoIndex;
+              setSelectedPhotoIndex(newIndex);
+            }
+          }
+          
+          showToast("Photo deleted successfully.", 'success');
+        } catch (error) {
+          console.error("Failed to delete photo:", error);
+          showAlert("Error", "Failed to delete photo. Please try again.", 'error');
+        }
+      }
+    );
   };
 
   if (isLoading) {
@@ -253,57 +431,226 @@ export default function EventDetailPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {filteredPhotos.map((photo) => (
+            {filteredPhotos.map((photo, index) => (
               <div 
                 key={photo.id}
-                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
+                className="group bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 h-[340px] flex flex-col transform hover:-translate-y-1 cursor-pointer"
+                onClick={() => {
+                  setSelectedPhotoIndex(index);
+                  setIsViewerOpen(true);
+                }}
               >
-                <div className="relative aspect-[4/3]">
+                <div className="relative w-full h-[200px] flex-shrink-0">
                   <Watermark>
                     <img 
                       src={getFullImageUrl(photo.thumbnail_path)} 
                       alt={`Photo ${photo.id}`} 
-                      className="w-full h-full object-cover"
+                      className="w-full h-[200px] object-cover group-hover:scale-105 transition-transform duration-300"
+                      style={{ objectPosition: 'center center' }}
                     />
                   </Watermark>
+                  <div className="absolute top-2 left-2">
+                    <span className="inline-block px-2 py-1 text-xs font-medium bg-black/50 text-white rounded backdrop-blur-sm">
+                      Photographer #1
+                    </span>
+                  </div>
                 </div>
-                <div className="p-4">
-                  {photo.bib_numbers && photo.bib_numbers.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-2">
-                      {photo.bib_numbers.map((bib, index) => (
-                        <span 
-                          key={index}
-                          className="inline-block px-2 py-1 text-xs font-semibold bg-blue-100 text-blue-800 rounded"
-                        >
-                          Bib #{bib}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {photo.timestamp && (
-                    <div className="text-sm text-gray-600 mb-3">
-                      {new Date(photo.timestamp).toLocaleTimeString()}
-                    </div>
-                  )}
-                  <div className="flex flex-col space-y-2">
-                    <a 
-                      href={getWatermarkedPhotoUrl(photo.id)} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="block text-center text-sm font-medium text-blue-600 hover:text-blue-800 py-1 border border-blue-200 rounded-md hover:bg-blue-50"
-                    >
-                      View Full Size
-                    </a>
+                <div className="p-3 flex-1 flex flex-col justify-between">
+                  <div>
+                    {photo.bib_numbers && photo.bib_numbers.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-1 items-center">
+                        {photo.bib_numbers.map((bib, index) => (
+                          <span 
+                            key={index}
+                            className="inline-flex items-center px-2 py-0.5 text-xs font-semibold bg-blue-100 text-blue-800 rounded"
+                          >
+                            Bib #{bib}
+                            <button 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                handleUntag(photo.id, bib); 
+                              }}
+                              className="ml-1 p-0.5 rounded-full text-blue-600 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              aria-label={`Report incorrect tag for bib ${bib}`}
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {photo.timestamp && (
+                      <div className="text-xs text-gray-600">
+                        {new Date(photo.timestamp).toLocaleTimeString()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-2 mt-2">
                     <button 
-                      onClick={() => downloadImage(photo.id, `race-photo-${photo.id}.jpg`)}
-                      className="block text-center text-sm font-medium text-green-600 hover:text-green-800 py-1 border border-green-200 rounded-md hover:bg-green-50"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        downloadImage(photo.id, `race-photo-${photo.id}.jpg`);
+                      }}
+                      className="flex-1 text-center text-sm font-medium text-green-600 hover:text-green-800 py-1 border border-green-200 rounded-md hover:bg-green-50 transition-colors"
                     >
                       Download
                     </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Add to cart functionality will be implemented later
+                      }}
+                      className="flex-1 text-center text-sm font-medium text-blue-600 hover:text-blue-800 py-1 border border-blue-200 rounded-md hover:bg-blue-50 transition-colors"
+                    >
+                      Add to Cart
+                    </button>
+                    {/* Admin Delete Button - Card */}
+                    {isAdmin && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation(); 
+                          handleDeletePhoto(photo.id);
+                        }}
+                        className="flex-none text-center text-sm font-medium text-red-600 hover:text-red-800 py-1 px-2 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
+                        aria-label={`Delete photo ${photo.id}`}
+                      >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                           <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Image Viewer Modal */}
+        {isViewerOpen && selectedPhotoIndex !== null && (
+          <div 
+            className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+            onClick={(e) => {
+              // Close if the click is directly on the backdrop
+              if (e.target === e.currentTarget) {
+                setIsViewerOpen(false);
+              }
+            }}
+          >
+            {/* Modal Content container - prevents clicks inside from closing */}
+            <div 
+              className="relative w-full h-full flex flex-col max-w-screen-xl max-h-screen-90vh bg-black"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close button */}
+              <button 
+                onClick={() => setIsViewerOpen(false)}
+                className="absolute top-4 right-4 text-white hover:text-gray-300 z-10"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              {/* Counter */}
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white px-4 py-2 rounded-full bg-black/50 backdrop-blur-sm">
+                {selectedPhotoIndex + 1} / {filteredPhotos.length}
+              </div>
+
+              {/* Main image and navigation container */}
+              <div className="flex-1 flex items-center justify-center p-4 relative">
+                {/* Navigation button: Previous */}
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handlePhotoNavigation('prev'); }}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 p-2 rounded-full bg-black/30 hover:bg-black/50 transition-colors z-10"
+                  aria-label="Previous photo"
+                >
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+
+                {/* Image */}
+                <img 
+                  src={getWatermarkedPhotoUrl(filteredPhotos[selectedPhotoIndex].id)}
+                  alt={`Photo ${filteredPhotos[selectedPhotoIndex].id}`}
+                  className="max-h-[80vh] max-w-[80vw] object-contain block"
+                />
+
+                {/* Navigation button: Next */}
+                <button 
+                  onClick={(e) => { /* No stopPropagation needed here */ handlePhotoNavigation('next'); }}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 p-2 rounded-full bg-black/30 hover:bg-black/50 transition-colors z-10"
+                  aria-label="Next photo"
+                >
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Bottom toolbar */}
+              <div className="bg-black/70 backdrop-blur-sm p-3 flex items-center justify-between z-10">
+                {/* Photo details */}
+                <div className="text-white text-sm space-y-1">
+                  <p>Photographer: Photographer #1</p>
+                  {filteredPhotos[selectedPhotoIndex].bib_numbers && filteredPhotos[selectedPhotoIndex].bib_numbers.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span>Bib Numbers:</span>
+                      {filteredPhotos[selectedPhotoIndex].bib_numbers.map((bib, index) => (
+                        <span 
+                          key={index}
+                          className="inline-flex items-center px-2 py-0.5 text-xs font-semibold bg-blue-100 text-blue-800 rounded"
+                        >
+                          Bib #{bib}
+                          <button 
+                            onClick={() => handleUntag(filteredPhotos[selectedPhotoIndex].id, bib)}
+                            className="ml-1 p-0.5 rounded-full text-blue-600 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            aria-label={`Report incorrect tag for bib ${bib}`}
+                          >
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex gap-4 items-center">
+                  <button 
+                    onClick={() => downloadImage(filteredPhotos[selectedPhotoIndex].id, `race-photo-${filteredPhotos[selectedPhotoIndex].id}.jpg`)}
+                    className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                  >
+                    Download
+                  </button>
+                  <button 
+                    onClick={() => {
+                      // Add to cart functionality will be implemented later
+                    }}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Add to Cart
+                  </button>
+                  {/* Admin Delete Button - Modal */}
+                  {isAdmin && (
+                     <button 
+                       onClick={() => handleDeletePhoto(filteredPhotos[selectedPhotoIndex].id)}
+                       className="p-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                       aria-label={`Delete photo ${filteredPhotos[selectedPhotoIndex].id}`}
+                     >
+                       <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                         <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                       </svg>
+                     </button>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
