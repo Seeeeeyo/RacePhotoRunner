@@ -31,6 +31,7 @@ class EventUpdate(BaseModel):
 # Properties shared by models stored in DB
 class EventInDBBase(EventBase):
     id: int
+    cover_image_path: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -41,6 +42,7 @@ class EventInDBBase(EventBase):
 # Properties to return via API
 class Event(EventInDBBase):
     photo_count: Optional[int] = 0
+    cover_image_url: Optional[str] = None
 
 
 # Properties stored in DB
@@ -56,6 +58,7 @@ class EventSummary(BaseModel):
     location: str
     slug: str
     photo_count: int
+    cover_image_url: Optional[str] = None
 
     class Config:
         from_attributes = True

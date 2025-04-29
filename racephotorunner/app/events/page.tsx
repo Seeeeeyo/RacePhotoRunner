@@ -2,12 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
 import { fetchEvents, EventSummary } from '@/lib/api';
 
+// Update the EventSummary type to include cover_image
+interface EventWithCover extends EventSummary {
+  cover_image_url?: string;
+}
+
 export default function EventsPage() {
-  const [events, setEvents] = useState<EventSummary[]>([]);
+  const [events, setEvents] = useState<EventWithCover[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { isAuthenticated, isAdmin } = useAuth();
 
@@ -75,8 +81,20 @@ export default function EventsPage() {
                 key={event.id} 
                 className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
               >
-                <div className="h-48 bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                  <span className="text-2xl font-bold text-white">{event.name}</span>
+                <div className="h-48 relative">
+                  {event.cover_image_url ? (
+                    <Image 
+                      src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${event.cover_image_url}`}
+                      alt={event.name}
+                      fill
+                      style={{ objectFit: 'cover' }}
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                      <span className="text-2xl font-bold text-white">{event.name}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="p-6">
                   <h2 className="text-xl font-semibold mb-2 text-gray-800">{event.name}</h2>

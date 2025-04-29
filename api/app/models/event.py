@@ -14,5 +14,6 @@ class Event(Base):
     description = Column(Text)
     is_active = Column(Boolean, default=True)
     slug = Column(String, unique=True, index=True)
+    cover_image_path = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
