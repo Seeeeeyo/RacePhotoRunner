@@ -164,14 +164,14 @@ export default function SearchPage() {
               <Button
                 variant={searchType === "bib" ? "default" : "outline"}
                 onClick={() => setSearchType("bib")}
-                className="flex-1 sm:flex-none text-black"
+                className={`flex-1 sm:flex-none ${searchType === "bib" ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-gray-700"}`}
               >
                 Bib Number
               </Button>
               <Button
                 variant={searchType === "event" ? "default" : "outline"}
                 onClick={() => setSearchType("event")}
-                className="flex-1 sm:flex-none text-black"
+                className={`flex-1 sm:flex-none ${searchType === "event" ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-gray-700"}`}
               >
                 Event
               </Button>

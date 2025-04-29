@@ -205,7 +205,7 @@ export default function EventDetailPage() {
       
       <div className="container mx-auto max-w-6xl px-4 py-8">
         <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-          <h2 className="text-xl font-bold mb-4">Filter Photos</h2>
+          <h2 className="text-xl font-bold mb-4 text-black">Filter Photos</h2>
           <div className="grid grid-cols-1 gap-4">
             <div>
               <label htmlFor="bibNumber" className="block text-sm font-medium text-gray-700 mb-1">
@@ -218,7 +218,7 @@ export default function EventDetailPage() {
                 value={filterParams.bibNumber}
                 onChange={handleFilterChange}
                 placeholder="Enter bib number"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-black"
               />
             </div>
           </div>
