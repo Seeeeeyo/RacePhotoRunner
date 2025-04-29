@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
-import { fetchEvents, EventSummary } from '@/lib/api';
+import { fetchEvents, EventSummary, getFullImageUrl } from '@/lib/api';
 
 // Update the EventSummary type to include cover_image
 interface EventWithCover extends EventSummary {
@@ -54,9 +54,6 @@ export default function EventsPage() {
                 </Button>
               </Link>
             )}
-            <Link href="/">
-              <Button variant="default">Back to Home</Button>
-            </Link>
           </div>
         </div>
         
@@ -82,13 +79,14 @@ export default function EventsPage() {
                 className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
               >
                 <div className="h-48 relative">
-                  {event.cover_image_url ? (
+                  {(event.cover_image_url || event.cover_image_path) ? (
                     <Image 
-                      src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${event.cover_image_url}`}
+                      src={getFullImageUrl(event.cover_image_url || event.cover_image_path)}
                       alt={event.name}
                       fill
                       style={{ objectFit: 'cover' }}
                       sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                      unoptimized
                     />
                   ) : (
                     <div className="h-full w-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">

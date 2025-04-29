@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
+import { Edit, Eye } from 'lucide-react';
 import { fetchEvents, EventSummary } from '@/lib/api';
 import AdminLayout from '@/components/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -47,8 +48,12 @@ export default function EventsPage() {
     <AdminLayout>
       <div className="max-w-7xl mx-auto py-8 px-4">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold">Events</h1>
-          <Button onClick={() => router.push('/admin/events/create')}>
+          <h1 className="text-3xl font-bold text-gray-900">Events</h1>
+          <Button 
+            variant="default"
+            onClick={() => router.push('/admin/events/create')}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
             Create New Event
           </Button>
         </div>
@@ -72,7 +77,9 @@ export default function EventsPage() {
                             src={`${API_BASE_URL}${event.cover_image_url}`}
                             alt={event.name}
                             fill
+                            sizes="(max-width: 96px) 100vw, 96px"
                             className="object-cover rounded"
+                            unoptimized
                           />
                         </div>
                       )}
@@ -94,15 +101,19 @@ export default function EventsPage() {
                     </div>
                     <div className="flex space-x-3">
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         onClick={() => router.push(`/admin/events/${event.id}/edit`)}
+                        className="text-gray-700 hover:text-gray-900 border-gray-300 flex items-center gap-2"
                       >
+                        <Edit className="h-4 w-4" />
                         Edit
                       </Button>
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         onClick={() => router.push(`/events/${event.id}`)}
+                        className="text-gray-700 hover:text-gray-900 border-gray-300 flex items-center gap-2"
                       >
+                        <Eye className="h-4 w-4" />
                         View
                       </Button>
                     </div>

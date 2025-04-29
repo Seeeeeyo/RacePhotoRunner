@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { fetchEvents, searchPhotosByBib, fetchEventPhotos, EventSummary, Photo as ApiPhoto, PhotoSearchResult } from "@/lib/api";
+import { Input } from '@/components/ui/input';
 
 // Get the API base URL from environment
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -133,8 +134,8 @@ export default function SearchPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-gray-800">Search Photos</h1>
           <Link href="/">
@@ -159,19 +160,19 @@ export default function SearchPage() {
           )}
           
           <div className="mb-6">
-            <h2 className="text-xl font-semibold mb-4 text-black">Search by</h2>
+            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Search by</h2>
             <div className="flex flex-wrap gap-2">
               <Button
                 variant={searchType === "bib" ? "default" : "outline"}
                 onClick={() => setSearchType("bib")}
-                className={`flex-1 sm:flex-none ${searchType === "bib" ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-gray-700"}`}
+                className={`flex-1 sm:flex-none ${searchType === "bib" ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-gray-700 dark:text-gray-200"}`}
               >
                 Bib Number
               </Button>
               <Button
                 variant={searchType === "event" ? "default" : "outline"}
                 onClick={() => setSearchType("event")}
-                className={`flex-1 sm:flex-none ${searchType === "event" ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-gray-700"}`}
+                className={`flex-1 sm:flex-none ${searchType === "event" ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-gray-700 dark:text-gray-200"}`}
               >
                 Event
               </Button>
@@ -181,24 +182,23 @@ export default function SearchPage() {
           <div className="space-y-4">
             {searchType === "bib" && (
               <div>
-                <label htmlFor="bibNumber" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="bibNumber" className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
                   Bib Number
                 </label>
-                <input
+                <Input
                   type="text"
                   id="bibNumber"
                   name="bibNumber"
                   value={searchParams.bibNumber}
                   onChange={handleParamChange}
                   placeholder="Enter bib number (e.g. 1234)"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
                 />
               </div>
             )}
 
             {searchType === "event" && (
               <div>
-                <label htmlFor="eventId" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="eventId" className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
                   Event
                 </label>
                 <select
@@ -206,7 +206,13 @@ export default function SearchPage() {
                   name="eventId"
                   value={searchParams.eventId}
                   onChange={handleParamChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
+                  className="mt-1 block w-full rounded-lg border border-gray-300 dark:border-gray-600 
+                  bg-gray-50 dark:bg-gray-700 
+                  text-gray-900 dark:text-white 
+                  px-4 py-2
+                  focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                  hover:border-blue-300 dark:hover:border-blue-500
+                  transition-colors duration-200"
                 >
                   <option value="">Select an event</option>
                   {events.map(event => (

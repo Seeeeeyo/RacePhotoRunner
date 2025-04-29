@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useParams } from 'next/navigation';
-import { fetchEvent } from '@/lib/api';
+import { fetchEvent, getFullImageUrl } from '@/lib/api';
 import AdminLayout from '@/components/AdminLayout';
 import { Button } from '@/components/ui/button';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -17,6 +18,7 @@ export default function EditEventPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -40,14 +42,14 @@ export default function EditEventPage() {
         if (eventData) {
           setFormData({
             name: eventData.name,
-            date: new Date(eventData.date).toISOString().split('T')[0], // Format date for input
+            date: new Date(eventData.date).toISOString().split('T')[0],
             location: eventData.location,
             description: eventData.description || '',
             is_active: eventData.is_active,
             slug: eventData.slug,
           });
-          if (eventData.cover_image_path) {
-            setCoverImagePreview(`${API_BASE_URL}${eventData.cover_image_path}`);
+          if (eventData.cover_image_path || eventData.cover_image_url) {
+            setCoverImagePreview(getFullImageUrl(eventData.cover_image_path || eventData.cover_image_url));
           }
         }
       } catch (error) {
@@ -112,6 +114,23 @@ export default function EditEventPage() {
     }
   };
 
+  const handleDelete = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/events/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error deleting event: ${response.statusText}`);
+      }
+
+      router.push('/admin/events');
+    } catch (error) {
+      console.error('Error deleting event:', error);
+      setError('Failed to delete event. Please try again.');
+    }
+  };
+
   if (isLoading) {
     return (
       <AdminLayout>
@@ -125,7 +144,28 @@ export default function EditEventPage() {
   return (
     <AdminLayout>
       <div className="max-w-4xl mx-auto py-8 px-4">
-        <h1 className="text-3xl font-bold mb-8 text-gray-900 dark:text-white">Edit Event</h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Edit Event</h1>
+          <Button
+            variant="destructive"
+            onClick={() => setShowDeleteDialog(true)}
+            className="bg-red-600 hover:bg-red-700 text-white"
+          >
+            Delete Event
+          </Button>
+        </div>
+
+        {/* Confirmation Dialog */}
+        <ConfirmationDialog
+          isOpen={showDeleteDialog}
+          onClose={() => setShowDeleteDialog(false)}
+          onConfirm={handleDelete}
+          title="Delete Event"
+          description="Are you sure you want to delete this event? This action cannot be undone."
+          confirmText="Delete"
+          cancelText="Cancel"
+          variant="destructive"
+        />
 
         {error && (
           <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
@@ -272,13 +312,13 @@ export default function EditEventPage() {
               />
             </div>
             {coverImagePreview && (
-              <div className="mt-4">
+              <div className="mt-4 relative h-[200px] w-[300px]">
                 <Image
                   src={coverImagePreview}
                   alt="Cover preview"
-                  width={300}
-                  height={200}
+                  fill
                   className="rounded-lg object-cover"
+                  unoptimized
                 />
               </div>
             )}

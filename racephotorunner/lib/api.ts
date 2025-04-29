@@ -39,6 +39,8 @@ export interface EventSummary {
   location: string;
   slug: string;
   photo_count: number;
+  cover_image_url?: string;
+  cover_image_path?: string;
 }
 
 export interface Event extends EventSummary {
@@ -262,4 +264,40 @@ export async function getCurrentUser(authHeaders: Record<string, string>): Promi
     console.error('Error fetching current user:', error);
     return null;
   }
+}
+
+export async function updateEvent(eventId: number, eventData: FormData): Promise<Event | null> {
+  try {
+    const response = await fetch(buildApiUrl(`events/${eventId}`), {
+      method: 'PUT',
+      body: eventData
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || `Error updating event: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error updating event:', error);
+    throw error;
+  }
+}
+
+// Helper function to get full image URL
+export function getFullImageUrl(path: string | null | undefined): string {
+  if (!path) return '/placeholder.jpg';
+  
+  // If the path already starts with http, return as is
+  if (path.startsWith('http')) {
+    return path;
+  }
+  
+  // Make sure path starts with / for proper joining
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  
+  // Join API base URL with path
+  return `${baseUrl}${normalizedPath}`;
 } 
