@@ -1,0 +1,220 @@
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useAuth } from '@/lib/auth';
+
+export default function AdminDashboard() {
+  const { isAuthenticated, isLoading, isAdmin, user, logout } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    // Only admin users should access this page
+    if (!isLoading && (!isAuthenticated || !isAdmin)) {
+      router.push('/signin?redirect=/admin/dashboard');
+    }
+  }, [isLoading, isAuthenticated, isAdmin, router]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !isAdmin) {
+    return null; // Will be redirected by useEffect
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <nav className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex">
+              <div className="flex-shrink-0 flex items-center">
+                <Link href="/" className="text-xl font-bold text-blue-600">
+                  RacePhotoRunner
+                </Link>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <span className="flex items-center text-gray-700 mr-4">
+                <span className="bg-green-100 text-green-800 px-2 py-1 text-xs font-medium rounded-full mr-2">
+                  Admin
+                </span>
+                Welcome, {user?.name || 'Admin'}
+              </span>
+              <button
+                onClick={logout}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <header className="bg-white shadow">
+        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Event Management Card */}
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="px-4 py-5 sm:p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0 bg-blue-500 rounded-md p-3">
+                    <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div className="ml-5">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900">Manage Events</h3>
+                    <p className="mt-2 text-sm text-gray-500">
+                      Create, edit, and manage race events
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-6">
+                  <Link
+                    href="/admin/events/create"
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    Manage Events
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* Photo Upload Card */}
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="px-4 py-5 sm:p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0 bg-green-500 rounded-md p-3">
+                    <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div className="ml-5">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900">Upload Photos</h3>
+                    <p className="mt-2 text-sm text-gray-500">
+                      Upload and manage race photos
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-6">
+                  <Link
+                    href="/admin/upload"
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                    Upload Photos
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* Analytics Card */}
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="px-4 py-5 sm:p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0 bg-purple-500 rounded-md p-3">
+                    <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <div className="ml-5">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900">Analytics</h3>
+                    <p className="mt-2 text-sm text-gray-500">
+                      View user and photo statistics
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-6">
+                  <Link
+                    href="/admin/analytics"
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                  >
+                    View Analytics
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Stats */}
+          <div className="mt-8 bg-white overflow-hidden shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">Overview</h3>
+              <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
+                <div className="px-4 py-5 bg-gray-50 shadow rounded-lg overflow-hidden sm:p-6">
+                  <dt className="text-sm font-medium text-gray-500 truncate">Total Events</dt>
+                  <dd className="mt-1 text-3xl font-semibold text-gray-900">2</dd>
+                </div>
+                <div className="px-4 py-5 bg-gray-50 shadow rounded-lg overflow-hidden sm:p-6">
+                  <dt className="text-sm font-medium text-gray-500 truncate">Total Photos</dt>
+                  <dd className="mt-1 text-3xl font-semibold text-gray-900">167</dd>
+                </div>
+                <div className="px-4 py-5 bg-gray-50 shadow rounded-lg overflow-hidden sm:p-6">
+                  <dt className="text-sm font-medium text-gray-500 truncate">Searches Today</dt>
+                  <dd className="mt-1 text-3xl font-semibold text-gray-900">24</dd>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Recent Activity */}
+          <div className="mt-8 bg-white overflow-hidden shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">Recent Activity</h3>
+              <div className="mt-5">
+                <ul className="divide-y divide-gray-200">
+                  <li className="py-4">
+                    <div className="flex space-x-3">
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-medium">Photos uploaded</h3>
+                          <p className="text-sm text-gray-500">1 hour ago</p>
+                        </div>
+                        <p className="text-sm text-gray-500">45 new photos uploaded to Boston Marathon 2024</p>
+                      </div>
+                    </div>
+                  </li>
+                  <li className="py-4">
+                    <div className="flex space-x-3">
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-medium">New event created</h3>
+                          <p className="text-sm text-gray-500">3 hours ago</p>
+                        </div>
+                        <p className="text-sm text-gray-500">NYC Half Marathon event was created</p>
+                      </div>
+                    </div>
+                  </li>
+                  <li className="py-4">
+                    <div className="flex space-x-3">
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-medium">Photos downloaded</h3>
+                          <p className="text-sm text-gray-500">Yesterday</p>
+                        </div>
+                        <p className="text-sm text-gray-500">12 photos were downloaded by users</p>
+                      </div>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+} 
