@@ -8,15 +8,14 @@
 - [x] View per event with access to associated pictures
 - [x] Watermarking of images
 - [x] View and download full-size images
+- [x] Replace YOLO + OCR with Gemini-based bib detection
 
 ---
 
 ## 🛠️ To Do
 
 ### 🔧 Core Functionality
-- [ ] Replace YOLO + OCR with Gemini-based bib detection
-  - Use `gem.md` as reference
-  - Extract and tag bib numbers from each image
+
 - [ ] Use CLIP to embed people/faces in each picture      https://github.com/openai/CLIP
   - Store multiple vectors per image in DB
   - Handle multiple subjects per photo
