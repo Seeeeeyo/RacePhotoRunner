@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/lib/clerk-auth';
+import { useAuth } from '@/lib/auth';
 import AdminLayout from '@/components/AdminLayout';
 
 // Type definition for activity item
@@ -16,7 +16,7 @@ interface ActivityItem {
 }
 
 export default function AdminDashboard() {
-  const { isAuthenticated, isLoading, isAdmin, user, getAuthHeaders } = useAuth();
+  const { isAuthenticated, isLoading, isAdmin, user, logout } = useAuth();
   const router = useRouter();
   const [stats, setStats] = useState({
     totalEvents: 0,
@@ -30,61 +30,71 @@ export default function AdminDashboard() {
   useEffect(() => {
     // Only admin users should access this page
     if (!isLoading && (!isAuthenticated || !isAdmin)) {
-      router.push('/');
+      router.push('/signin?redirect=/admin/dashboard');
     }
   }, [isLoading, isAuthenticated, isAdmin, router]);
 
   useEffect(() => {
-    // Fetch stats and activity only if authenticated and admin
+    // Fetch stats from API
     if (isAuthenticated && isAdmin) {
-      const fetchData = async () => {
-        setIsLoadingStats(true);
-        setIsLoadingActivities(true);
-        
+      const fetchStats = async () => {
         try {
-          const headers = await getAuthHeaders();
-          
-          // Fetch Stats
-          const statsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/admin/stats`, {
+          setIsLoadingStats(true);
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/admin/stats`, {
             method: 'GET',
-            headers: headers,
+            headers: {
+              'Content-Type': 'application/json',
+              // Temporarily disable auth for development
+              // 'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
           });
           
-          if (statsResponse.ok) {
-            const statsData = await statsResponse.json();
+          if (response.ok) {
+            const data = await response.json();
             setStats({
-              totalEvents: statsData.total_events || 0,
-              totalPhotos: statsData.total_photos || 0,
-              searchesToday: statsData.searches_today || 0,
+              totalEvents: data.total_events || 0,
+              totalPhotos: data.total_photos || 0,
+              searchesToday: data.searches_today || 0,
             });
           } else {
-            console.error('Failed to fetch statistics', statsResponse.statusText);
+            console.error('Failed to fetch statistics');
           }
-          
-          // Fetch Activity
-          const activityResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/admin/recent-activity`, {
-            method: 'GET',
-            headers: headers,
-          });
-          
-          if (activityResponse.ok) {
-            const activityData = await activityResponse.json();
-            setActivities(activityData);
-          } else {
-            console.error('Failed to fetch activity', activityResponse.statusText);
-          }
-          
         } catch (error) {
-          console.error('Error fetching dashboard data:', error);
+          console.error('Error fetching statistics:', error);
         } finally {
           setIsLoadingStats(false);
+        }
+      };
+      
+      const fetchActivity = async () => {
+        try {
+          setIsLoadingActivities(true);
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/admin/recent-activity`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              // Temporarily disable auth for development
+              // 'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            setActivities(data);
+          } else {
+            console.error('Failed to fetch activity');
+          }
+        } catch (error) {
+          console.error('Error fetching activity:', error);
+        } finally {
           setIsLoadingActivities(false);
         }
       };
       
-      fetchData();
+      fetchStats();
+      fetchActivity();
     }
-  }, [isAuthenticated, isAdmin, getAuthHeaders]);
+  }, [isAuthenticated, isAdmin]);
 
   // Helper function to format timestamps
   const formatTime = (timestamp: string): string => {

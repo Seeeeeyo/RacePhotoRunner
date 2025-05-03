@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import Image from 'next/image';
 
 export default function CreateEventPage() {
-  const { isAuthenticated, isLoading, isAdmin, user, getAuthHeaders } = useAuth();
+  const { isAuthenticated, isLoading, isPhotographer, user, getAuthHeaders } = useAuth();
   const router = useRouter();
   const [unauthorized, setUnauthorized] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,7 +39,7 @@ export default function CreateEventPage() {
       }
       reader.readAsDataURL(file);
     } else {
-      setImagePreviewUrl(null);
+      setImagePreviewUrl(null); // Clear preview if no file is selected
     }
   };
 
@@ -75,7 +75,7 @@ export default function CreateEventPage() {
       
       if (result) {
         toast.success('Event created successfully!');
-        router.push('/admin/events');
+        router.push('/photographer/events');
       } else {
         throw new Error('Failed to create event');
       }
@@ -88,15 +88,15 @@ export default function CreateEventPage() {
   };
 
   useEffect(() => {
-    // If authentication has loaded and user is not an admin, mark as unauthorized
+    // If authentication has loaded and user is not a photographer, mark as unauthorized
     if (!isLoading) {
       if (!isAuthenticated) {
         router.push('/signin');
-      } else if (!isAdmin) {
+      } else if (!isPhotographer) {
         setUnauthorized(true);
       }
     }
-  }, [isLoading, isAuthenticated, isAdmin, router]);
+  }, [isLoading, isAuthenticated, isPhotographer, router]);
 
   if (isLoading) {
     return (
@@ -127,7 +127,7 @@ export default function CreateEventPage() {
             </svg>
             <h2 className="mt-4 text-2xl font-bold text-gray-900">Access Denied</h2>
             <p className="mt-2 text-gray-600">
-              Only administrators can create events here. Your current role is {user?.role || 'unknown'}.
+              Only photographers can create events. Your current role is {user?.role || 'unknown'}.
             </p>
             <div className="mt-6">
               <button
@@ -223,6 +223,7 @@ export default function CreateEventPage() {
                 onChange={handleFileChange}
                 className="mt-1 block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
               />
+              {/* Image Preview Section */}
               {imagePreviewUrl && (
                 <div className="mt-4">
                   <p className="text-sm font-medium text-gray-700 mb-2">Image Preview:</p>

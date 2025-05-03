@@ -1,28 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useAuth } from '@/lib/auth';
+import { useAuth } from '@/lib/clerk-auth';
+import { SignInButton, SignUpButton, UserButton } from '@clerk/nextjs';
+import { Routes } from '@/lib/routes';
+import { useRouter } from 'next/navigation';
 
 export default function Header() {
-  const { isAuthenticated, isLoading, isAdmin, user, login, logout } = useAuth();
+  const { isAuthenticated, isLoading, isAdmin, user, isPhotographer, isAthlete } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
 
   const navItems = [
-    { name: 'Home', href: '/' },
-    { name: 'Events', href: '/events' },
-    { name: 'Search', href: '/search' },
+    { name: 'Home', href: Routes.HOME },
+    { name: 'Events', href: Routes.EVENTS },
+    { name: 'Search', href: Routes.SEARCH },
   ];
-
-  const handleAuth0Login = () => {
-    login();
-  };
-
-  const handleAuth0Logout = () => {
-    logout();
-  };
 
   return (
     <header className="bg-white shadow-md">
@@ -30,7 +26,7 @@ export default function Header() {
         <div className="flex justify-between h-16">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
-              <Link href="/" className="text-blue-600 font-bold text-xl">
+              <Link href={Routes.HOME} className="text-blue-600 font-bold text-xl">
                 RacePhotoRunner
               </Link>
             </div>
@@ -56,50 +52,45 @@ export default function Header() {
               <div className="h-5 w-5 border-t-2 border-blue-500 rounded-full animate-spin"></div>
             ) : isAuthenticated ? (
               <div className="ml-3 relative flex items-center space-x-4">
-                <span className="text-sm font-medium text-gray-700">
-                  Hello, {user?.name}
-                </span>
+                {user?.role && (
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                    user.role === 'photographer' ? 'bg-green-100 text-green-800' : 
+                    'bg-blue-100 text-blue-800'
+                  }`}>
+                    {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                  </span>
+                )}
                 {isAdmin && (
-                  <Link 
-                    href="/admin/dashboard"
+                  <button 
+                    onClick={() => router.push(Routes.ADMIN_DASHBOARD)}
                     className="px-3 py-2 rounded-md text-sm font-medium bg-amber-100 text-amber-800 hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500"
                   >
                     Admin
-                  </Link>
+                  </button>
                 )}
-                <Link 
-                  href="/profile"
-                  className="px-3 py-2 rounded-md text-sm font-medium text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Profile
-                </Link>
-                <button
-                  onClick={handleAuth0Logout}
-                  className="px-3 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Log out
-                </button>
+                {isPhotographer && (
+                  <button 
+                    onClick={() => router.push(Routes.PHOTOGRAPHER_EVENT_CREATE)}
+                    className="px-3 py-2 rounded-md text-sm font-medium bg-green-100 text-green-800 hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                    Create Event
+                  </button>
+                )}
+                <UserButton afterSignOutUrl={Routes.HOME} />
               </div>
             ) : (
               <div className="flex space-x-4">
-                <button
-                  onClick={handleAuth0Login}
-                  className="px-3 py-2 rounded-md text-sm font-medium text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Auth0 Login
-                </button>
-                <Link
-                  href="/signin"
-                  className="px-3 py-2 rounded-md text-sm font-medium text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Sign in
-                </Link>
-                <Link
-                  href="/signup"
-                  className="px-3 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Sign up
-                </Link>
+                <SignInButton mode="modal">
+                  <button className="px-3 py-2 rounded-md text-sm font-medium text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Sign in
+                  </button>
+                </SignInButton>
+                <SignUpButton mode="modal">
+                  <button className="px-3 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Sign up
+                  </button>
+                </SignUpButton>
               </div>
             )}
           </div>
@@ -151,58 +142,57 @@ export default function Header() {
             ) : isAuthenticated ? (
               <div className="space-y-1">
                 <div className="px-4 py-2">
-                  <p className="text-sm font-medium text-gray-700">
-                    Hello, {user?.name}
-                  </p>
                   <p className="text-sm font-medium text-gray-500">
                     {user?.email}
                   </p>
+                  {user?.role && (
+                    <p className={`mt-1 inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                      user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                      user.role === 'photographer' ? 'bg-green-100 text-green-800' : 
+                      'bg-blue-100 text-blue-800'
+                    }`}>
+                      {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                    </p>
+                  )}
                 </div>
                 {isAdmin && (
-                  <Link
-                    href="/admin/dashboard"
+                  <button 
+                    onClick={() => {
+                      router.push(Routes.ADMIN_DASHBOARD);
+                      setMobileMenuOpen(false);
+                    }}
                     className="block w-full text-left px-4 py-2 text-base font-medium bg-amber-50 text-amber-800"
-                    onClick={() => setMobileMenuOpen(false)}
                   >
                     Admin Dashboard
-                  </Link>
+                  </button>
                 )}
-                <Link
-                  href="/profile"
-                  className="block w-full text-left px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Profile
-                </Link>
-                <button
-                  onClick={handleAuth0Logout}
-                  className="block w-full text-left px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
-                >
-                  Log out
-                </button>
+                {isPhotographer && (
+                  <button 
+                    onClick={() => {
+                      router.push(Routes.PHOTOGRAPHER_EVENT_CREATE);
+                      setMobileMenuOpen(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-base font-medium bg-green-50 text-green-800"
+                  >
+                    Create Event
+                  </button>
+                )}
+                <div className="px-4 py-2">
+                  <UserButton afterSignOutUrl={Routes.HOME} />
+                </div>
               </div>
             ) : (
               <div className="space-y-1 px-4 flex flex-col">
-                <button
-                  onClick={handleAuth0Login}
-                  className="block py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 text-left"
-                >
-                  Auth0 Login
-                </button>
-                <Link
-                  href="/signin"
-                  className="block py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Sign in
-                </Link>
-                <Link
-                  href="/signup"
-                  className="block py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Sign up
-                </Link>
+                <SignInButton mode="modal">
+                  <button className="py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 text-left">
+                    Sign in
+                  </button>
+                </SignInButton>
+                <SignUpButton mode="modal">
+                  <button className="py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 text-left">
+                    Sign up
+                  </button>
+                </SignUpButton>
               </div>
             )}
           </div>
