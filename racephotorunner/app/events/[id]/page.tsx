@@ -56,7 +56,7 @@ function Watermark({ children }: { children: React.ReactNode }) {
 
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { isAdmin, getAuthHeaders, isAuthenticated, user } = useAuth();
+  const { isAdmin, isPhotographer, getAuthHeaders, isAuthenticated, user } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -362,24 +362,37 @@ export default function EventDetailPage() {
             </div>
             {canManage && (
               <div className="flex space-x-3 mt-4 md:mt-0">
-                <Link 
-                  href={`/admin/events/${event.id}/edit`} 
-                  passHref
-                  legacyBehavior
-                >
-                  <Button variant="outline" className="bg-gray-100 hover:bg-gray-200 text-gray-900">
-                    <Edit className="h-4 w-4 mr-2 text-gray-900" /> Edit Event
-                  </Button>
-                </Link>
-                <Link 
-                  href={`/admin/upload?eventId=${event.id}`} 
-                  passHref
-                  legacyBehavior
-                >
-                  <Button variant="default" className="bg-green-600 hover:bg-green-700 text-white">
-                    <Upload className="h-4 w-4 mr-2" /> Upload Photos
-                  </Button>
-                </Link>
+                {/* Admin Links */}
+                {isAdmin && (
+                  <>
+                    <Link href={`/admin/events/${event.id}/edit`}>
+                      <Button variant="outline" className="bg-gray-100 hover:bg-gray-200 text-gray-900">
+                        <Edit className="h-4 w-4 mr-2 text-gray-900" /> Edit (Admin)
+                      </Button>
+                    </Link>
+                    <Link href={`/admin/upload?eventId=${event.id}`}>
+                      <Button variant="default" className="bg-green-600 hover:bg-green-700 text-white">
+                        <Upload className="h-4 w-4 mr-2" /> Upload (Admin)
+                      </Button>
+                    </Link>
+                  </>
+                )}
+                
+                {/* Photographer Links */}
+                {isPhotographer && (
+                  <>
+                    <Link href={`/photographer/events/${event.id}/edit`}>
+                      <Button variant="outline" className="bg-gray-100 hover:bg-gray-200 text-gray-900">
+                        <Edit className="h-4 w-4 mr-2 text-gray-900" /> Edit (Photographer)
+                      </Button>
+                    </Link>
+                    <Link href={`/photographer/upload?eventId=${event.id}`}>
+                      <Button variant="default" className="bg-green-600 hover:bg-green-700 text-white">
+                        <Upload className="h-4 w-4 mr-2" /> Upload Photos
+                      </Button>
+                    </Link>
+                  </>
+                )}
               </div>
             )}
           </div>

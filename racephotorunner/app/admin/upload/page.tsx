@@ -4,12 +4,14 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useAuth } from '@/lib/auth';
+import { useAuth } from '@/lib/clerk-auth';
 import { fetchEvents, fetchEvent, uploadPhoto, EventSummary } from '@/lib/api';
 import AdminLayout from '@/components/AdminLayout';
 
 export default function AdminUploadPage() {
+  console.log("AdminUploadPage rendering");
   const { isAuthenticated, isLoading, isAdmin, user, getAuthHeaders } = useAuth();
+  console.log("Auth state:", { isAuthenticated, isLoading, isAdmin });
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -33,44 +35,36 @@ export default function AdminUploadPage() {
 
   // Load events when the component mounts
   useEffect(() => {
+    console.log("Primary useEffect running", { isLoading, isAuthenticated, isAdmin });
+    
     // Only admin users should access this page
     if (!isLoading && (!isAuthenticated || !isAdmin)) {
+      console.log("Redirecting to signin - not authenticated or not admin");
       router.push('/signin?redirect=/admin/upload');
       return;
     }
 
     const loadEvents = async () => {
+      console.log("loadEvents function started");
       try {
         setEventsLoading(true);
+        console.log("Fetching events...");
         const eventsData = await fetchEvents();
+        console.log("Events fetched:", eventsData.length);
         setEvents(eventsData);
-      } catch (error) {
-        console.error('Failed to load events:', error);
-        setErrorMessage('Failed to load events. Please refresh the page.');
-      } finally {
-        setEventsLoading(false);
-      }
-    };
-
-    if (isAuthenticated && isAdmin) {
-      loadEvents();
-    }
-  }, [isLoading, isAuthenticated, isAdmin, router]);
-
-  useEffect(() => {
-    // Read eventId from URL query parameters
-    const eventIdFromUrl = searchParams.get('eventId');
-    if (eventIdFromUrl) {
-      setUrlEventId(eventIdFromUrl);
-      
-      // Check if the event is already in the loaded events list
-      if (events.find(e => e.id.toString() === eventIdFromUrl)) {
-        setSelectedEvent(eventIdFromUrl);
-      } else {
-        // If not in the list, fetch the specific event by ID
-        const fetchSpecificEvent = async () => {
+        
+        // Check for eventId param after loading events
+        const eventIdFromUrl = searchParams.get('eventId');
+        console.log("Event ID from URL:", eventIdFromUrl);
+        
+        if (eventIdFromUrl && !eventsData.find(e => e.id.toString() === eventIdFromUrl)) {
+          console.log("Need to fetch specific event");
+          // If the eventId from URL is not in the loaded events, fetch it specifically
           try {
+            console.log("Fetching specific event:", eventIdFromUrl);
             const eventData = await fetchEvent(parseInt(eventIdFromUrl));
+            console.log("Specific event fetched:", eventData);
+            
             if (eventData) {
               // Create an EventSummary from the fetched event data
               const eventSummary: EventSummary = {
@@ -84,6 +78,7 @@ export default function AdminUploadPage() {
               };
               
               // Add this event to the events list
+              console.log("Adding specific event to list");
               setEvents(prevEvents => [eventSummary, ...prevEvents]);
               setSelectedEvent(eventIdFromUrl);
             } else {
@@ -92,12 +87,37 @@ export default function AdminUploadPage() {
           } catch (error) {
             console.error(`Error fetching event ID ${eventIdFromUrl}:`, error);
           }
-        };
+        } else if (eventIdFromUrl) {
+          console.log("Event found in list, selecting it");
+          // If the event is in the list, select it
+          setSelectedEvent(eventIdFromUrl);
+        }
         
-        fetchSpecificEvent();
+      } catch (error) {
+        console.error('Failed to load events:', error);
+        setErrorMessage('Failed to load events. Please refresh the page.');
+      } finally {
+        console.log("Setting eventsLoading to false");
+        setEventsLoading(false);
       }
+    };
+
+    // Only run loadEvents if authenticated and admin, and not loading
+    if (!isLoading && isAuthenticated && isAdmin) {
+      console.log("Calling loadEvents");
+      loadEvents();
     }
-  }, [searchParams, events]);
+  }, [isLoading, isAuthenticated, isAdmin, router, searchParams]);
+
+  // Simpler effect for URL parameter
+  useEffect(() => {
+    console.log("URL param effect running");
+    const eventIdFromUrl = searchParams.get('eventId');
+    if (eventIdFromUrl) {
+      console.log("Setting URL event ID:", eventIdFromUrl);
+      setUrlEventId(eventIdFromUrl);
+    }
+  }, [searchParams]);
 
   const handleEventChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedEvent(e.target.value);
@@ -134,7 +154,12 @@ export default function AdminUploadPage() {
     setProgress(0);
     
     try {
-      const authHeaders = getAuthHeaders() || {};
+      const authHeaders = await getAuthHeaders() || {};
+      // Ensure we have the user ID in the headers
+      if (user?.id && !('x-clerk-user-id' in authHeaders)) {
+        authHeaders['x-clerk-user-id'] = user.id;
+      }
+      
       const totalFiles = files.length;
       let uploadedCount = 0;
       
@@ -144,6 +169,10 @@ export default function AdminUploadPage() {
         const formData = new FormData();
         formData.append('event_id', selectedEvent);
         formData.append('photo', file);
+        // Add the clerk user ID to the form data
+        if (user?.id) {
+          formData.append('clerk_user_id', user.id);
+        }
         
         try {
           await uploadPhoto(formData, authHeaders);
@@ -170,18 +199,25 @@ export default function AdminUploadPage() {
     }
   };
 
+  console.log("Render condition check:", { isLoading, eventsLoading });
+
   if (isLoading || eventsLoading) {
+    console.log("Rendering loading spinner");
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        <div className="ml-3">Loading...</div>
       </div>
     );
   }
 
   if (!isAuthenticated || !isAdmin) {
+    console.log("Not authenticated or not admin, returning null");
     return null; // Will be redirected by useEffect
   }
 
+  console.log("Rendering full component");
+  
   return (
     <AdminLayout>
       <div className="max-w-4xl mx-auto py-8 px-4">

@@ -120,6 +120,7 @@ For full API documentation, visit http://localhost:8000/docs when the API is run
 
 commands 
 
-cd /Users/selimgilon/Desktop/SportBoost/RacePhotoRunner/racephotorunner && nvm use 18.18.0 && npm run devcephotorunner && nvm use 18.18.0 
-
 cd /Users/selimgilon/Desktop/SportBoost/RacePhotoRunner/api && source venv/bin/activate && python -m uvicorn app.main:app --reload
+
+
+cd /Users/selimgilon/Desktop/SportBoost/RacePhotoRunner/racephotorunner && nvm use 18.18.0 && npm run dev

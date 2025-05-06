@@ -22,10 +22,11 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"], # In production, replace with specific origins
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8000"], # Include multiple origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"]  # Add this to expose headers for file downloads
 )
 
 # Include routers

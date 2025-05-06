@@ -1,16 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useAuth } from '@/lib/auth';
-import { fetchEvents, uploadPhoto, EventSummary } from '@/lib/api';
+import { useAuth } from '@/lib/clerk-auth';
+import { fetchEvents, fetchEvent, uploadPhoto, EventSummary } from '@/lib/api';
 import AdminLayout from '@/components/AdminLayout';
 
-export default function AdminUploadPage() {
-  const { isAuthenticated, isLoading, isAdmin, user, getAuthHeaders } = useAuth();
+export default function PhotographerUploadPage() {
+  const { isAuthenticated, isLoading, isPhotographer, user, getAuthHeaders } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
@@ -21,6 +22,7 @@ export default function AdminUploadPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [previews, setPreviews] = useState<string[]>([]);
+  const [urlEventId, setUrlEventId] = useState<string | null>(null);
 
   // Cleanup previews on unmount
   useEffect(() => {
@@ -31,29 +33,89 @@ export default function AdminUploadPage() {
 
   // Load events when the component mounts
   useEffect(() => {
-    // Only admin users should access this page
-    if (!isLoading && (!isAuthenticated || !isAdmin)) {
-      router.push('/signin?redirect=/admin/upload');
+    console.log("Primary useEffect running", { isLoading, isAuthenticated, isPhotographer });
+    
+    // Only photographer users should access this page
+    if (!isLoading && (!isAuthenticated || !isPhotographer)) {
+      console.log("Redirecting to signin - not authenticated or not photographer");
+      router.push('/signin?redirect=/photographer/upload');
       return;
     }
 
     const loadEvents = async () => {
+      console.log("loadEvents function started");
       try {
         setEventsLoading(true);
+        console.log("Fetching events...");
         const eventsData = await fetchEvents();
+        console.log("Events fetched:", eventsData.length);
         setEvents(eventsData);
+        
+        // Check for eventId param after loading events
+        const eventIdFromUrl = searchParams.get('eventId');
+        console.log("Event ID from URL:", eventIdFromUrl);
+        
+        if (eventIdFromUrl && !eventsData.find(e => e.id.toString() === eventIdFromUrl)) {
+          console.log("Need to fetch specific event");
+          // If the eventId from URL is not in the loaded events, fetch it specifically
+          try {
+            console.log("Fetching specific event:", eventIdFromUrl);
+            const eventData = await fetchEvent(parseInt(eventIdFromUrl));
+            console.log("Specific event fetched:", eventData);
+            
+            if (eventData) {
+              // Create an EventSummary from the fetched event data
+              const eventSummary: EventSummary = {
+                id: eventData.id,
+                name: eventData.name,
+                date: eventData.date,
+                location: eventData.location,
+                slug: eventData.slug,
+                photo_count: eventData.photo_count || 0,
+                cover_image_url: eventData.cover_image_url
+              };
+              
+              // Add this event to the events list
+              console.log("Adding specific event to list");
+              setEvents(prevEvents => [eventSummary, ...prevEvents]);
+              setSelectedEvent(eventIdFromUrl);
+            } else {
+              console.warn(`Event ID ${eventIdFromUrl} could not be found.`);
+            }
+          } catch (error) {
+            console.error(`Error fetching event ID ${eventIdFromUrl}:`, error);
+          }
+        } else if (eventIdFromUrl) {
+          console.log("Event found in list, selecting it");
+          // If the event is in the list, select it
+          setSelectedEvent(eventIdFromUrl);
+        }
+        
       } catch (error) {
         console.error('Failed to load events:', error);
         setErrorMessage('Failed to load events. Please refresh the page.');
       } finally {
+        console.log("Setting eventsLoading to false");
         setEventsLoading(false);
       }
     };
 
-    if (isAuthenticated && isAdmin) {
+    // Only run loadEvents if authenticated and photographer, and not loading
+    if (!isLoading && isAuthenticated && isPhotographer) {
+      console.log("Calling loadEvents");
       loadEvents();
     }
-  }, [isLoading, isAuthenticated, isAdmin, router]);
+  }, [isLoading, isAuthenticated, isPhotographer, router, searchParams]);
+
+  // Simpler effect for URL parameter
+  useEffect(() => {
+    console.log("URL param effect running");
+    const eventIdFromUrl = searchParams.get('eventId');
+    if (eventIdFromUrl) {
+      console.log("Setting URL event ID:", eventIdFromUrl);
+      setUrlEventId(eventIdFromUrl);
+    }
+  }, [searchParams]);
 
   const handleEventChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedEvent(e.target.value);
@@ -90,7 +152,12 @@ export default function AdminUploadPage() {
     setProgress(0);
     
     try {
-      const authHeaders = getAuthHeaders() || {};
+      const authHeaders = await getAuthHeaders() || {};
+      // Ensure we have the user ID in the headers
+      if (user?.id && !('x-clerk-user-id' in authHeaders)) {
+        authHeaders['x-clerk-user-id'] = user.id;
+      }
+      
       const totalFiles = files.length;
       let uploadedCount = 0;
       
@@ -100,6 +167,10 @@ export default function AdminUploadPage() {
         const formData = new FormData();
         formData.append('event_id', selectedEvent);
         formData.append('photo', file);
+        // Add the clerk user ID to the form data
+        if (user?.id) {
+          formData.append('clerk_user_id', user.id);
+        }
         
         try {
           await uploadPhoto(formData, authHeaders);
@@ -130,18 +201,19 @@ export default function AdminUploadPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        <div className="ml-3">Loading...</div>
       </div>
     );
   }
 
-  if (!isAuthenticated || !isAdmin) {
+  if (!isAuthenticated || !isPhotographer) {
     return null; // Will be redirected by useEffect
   }
 
   return (
     <AdminLayout>
       <div className="max-w-4xl mx-auto py-8 px-4">
-        <h1 className="text-3xl font-bold mb-8 text-gray-900 dark:text-white">Upload Photos</h1>
+        <h1 className="text-3xl font-bold mb-8 text-gray-900 dark:text-white">Upload Photos (Photographer)</h1>
 
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
           {errorMessage && (
@@ -271,10 +343,21 @@ export default function AdminUploadPage() {
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3">
+            {isUploading && (
+              <div className="mt-4">
+                <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                  <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
+                </div>
+                <p className="text-sm text-center mt-2 text-gray-600 dark:text-gray-400">
+                  Uploading {progress}% complete
+                </p>
+              </div>
+            )}
+            
+            <div className="flex justify-end gap-4 mt-6">
               <button
                 type="button"
-                onClick={() => router.push('/admin/events')}
+                onClick={() => router.push('/photographer/events')}
                 className="inline-flex justify-center py-2 px-4 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 disabled={isUploading}
               >
@@ -282,20 +365,10 @@ export default function AdminUploadPage() {
               </button>
               <button
                 type="submit"
-                disabled={!selectedEvent || !files || files.length === 0 || isUploading}
-                className="inline-flex items-center justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                disabled={isUploading}
               >
-                {isUploading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Uploading ({progress}%)
-                  </>
-                ) : (
-                  'Upload Photos'
-                )}
+                {isUploading ? 'Uploading...' : 'Upload Photos'}
               </button>
             </div>
           </form>

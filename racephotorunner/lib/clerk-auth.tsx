@@ -18,6 +18,7 @@ type AuthContextType = {
   hasRole: (role: Role) => boolean;
   isPhotographer: boolean;
   isAthlete: boolean;
+  getAuthHeaders: () => Promise<HeadersInit | undefined>;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -28,17 +29,18 @@ const AuthContext = createContext<AuthContextType>({
   hasRole: () => false,
   isPhotographer: false,
   isAthlete: false,
+  getAuthHeaders: async () => undefined,
 });
 
 export const ClerkAuthProvider = ({ children }: { children: ReactNode }) => {
-  const { isLoaded, isSignedIn } = useClerkAuth();
+  const clerkAuth = useClerkAuth();
   const { user: clerkUser, isLoaded: isUserLoaded } = useUser();
   
   // Combined loading state from Clerk hooks
-  const isLoading = !isLoaded || !isUserLoaded;
+  const isLoading = !clerkAuth.isLoaded || !isUserLoaded;
   
   // User data from Clerk, including role from metadata
-  const userData = isSignedIn && clerkUser ? {
+  const userData = clerkAuth.isSignedIn && clerkUser ? {
     id: clerkUser.id,
     name: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || clerkUser.username || 'User',
     email: clerkUser.primaryEmailAddress?.emailAddress,
@@ -57,17 +59,31 @@ export const ClerkAuthProvider = ({ children }: { children: ReactNode }) => {
   // Convenience properties for common role checks
   const isPhotographer = hasRole('photographer');
   const isAthlete = hasRole('athlete');
+
+  // Function to get authorization headers
+  const getAuthHeaders = async (): Promise<HeadersInit | undefined> => {
+    if (!clerkAuth.isSignedIn) return undefined;
+    try {
+      const token = await clerkAuth.getToken();
+      if (!token) return undefined;
+      return { 'Authorization': `Bearer ${token}` };
+    } catch (error) {
+      console.error("Error getting auth token:", error);
+      return undefined;
+    }
+  };
   
   return (
     <AuthContext.Provider
       value={{
-        isAuthenticated: !!isSignedIn,
+        isAuthenticated: !!clerkAuth.isSignedIn,
         isLoading,
         isAdmin,
         user: userData,
         hasRole,
         isPhotographer,
         isAthlete,
+        getAuthHeaders,
       }}
     >
       {children}

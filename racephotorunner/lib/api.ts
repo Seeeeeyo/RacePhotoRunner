@@ -146,10 +146,17 @@ export const createEvent = async (eventData: Record<string, any>, headers: Heade
 
 export async function uploadPhoto(photoData: FormData, authHeaders: HeadersInit | undefined): Promise<Photo | null> {
   try {
+    // Get the Clerk user ID from auth headers and append to form data if available
+    const userId = authHeaders && 'x-clerk-user-id' in authHeaders ? authHeaders['x-clerk-user-id'] : null;
+    if (userId && !photoData.has('clerk_user_id')) {
+      photoData.append('clerk_user_id', userId.toString());
+    }
+    
     const response = await fetch(API_BASE_URL + '/photos/upload', {
       method: 'POST',
       headers: authHeaders || {},
-      body: photoData
+      body: photoData,
+      credentials: 'include', // Include cookies for CORS
     });
     
     if (!response.ok) {

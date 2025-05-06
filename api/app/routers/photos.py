@@ -35,12 +35,12 @@ def read_photos(
 async def upload_photo(
     event_id: int = Form(...),
     photo: UploadFile = File(...),
-    # Temporarily comment out auth for development
-    # current_user = Depends(get_current_admin_user),
+    # Current approach: Use clerk auth headers
+    clerk_user_id: str = Form(None),  # Allow for passing clerk_user_id
     db: Session = Depends(get_db)
 ):
     """
-    Upload a new photo (admin only) - Auth temporarily disabled for development
+    Upload a new photo - Auth temporarily handled manually to support both admin and user uploads
     """
     # Check if the file is a valid image
     if not is_valid_image(photo.filename):
@@ -51,9 +51,41 @@ async def upload_photo(
     
     # Save the uploaded file
     from app.models.photo import Photo as PhotoModel
+    from app.models.user import User as UserModel
     import os
     from datetime import datetime
     import uuid
+    
+    # Find a photographer_id - first look for an existing user with the clerk_id
+    photographer_id = None
+    if clerk_user_id:
+        user = db.query(UserModel).filter(UserModel.clerk_id == clerk_user_id).first()
+        if user:
+            photographer_id = user.id
+    
+    # If no user is found, use a default admin user
+    if not photographer_id:
+        # Fetch the first admin or first user in the database
+        admin = db.query(UserModel).filter(UserModel.role == "admin").first()
+        if admin:
+            photographer_id = admin.id
+        else:
+            # Last resort - get any user
+            first_user = db.query(UserModel).first()
+            if first_user:
+                photographer_id = first_user.id
+            else:
+                # If no users exist, create a system user
+                system_user = UserModel(
+                    username="system",
+                    email="system@example.com",
+                    is_active=True,
+                    role="admin"
+                )
+                db.add(system_user)
+                db.commit()
+                db.refresh(system_user)
+                photographer_id = system_user.id
     
     # Create directories if they don't exist
     os.makedirs("uploads/photos", exist_ok=True)
@@ -88,6 +120,7 @@ async def upload_photo(
         filename=photo.filename,
         path=photo_path,
         thumbnail_path=thumbnail_path,
+        photographer_id=photographer_id,  # Add photographer_id
         bib_numbers=bib_numbers,
         is_public=True
     )
