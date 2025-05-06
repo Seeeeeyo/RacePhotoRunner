@@ -9,6 +9,29 @@ from app.utils.auth import get_current_active_user, get_current_admin_user
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+@router.post("/sync-clerk-user")
+async def sync_clerk_user(
+    clerk_data: dict,  # Should come from Clerk webhook
+    db: Session = Depends(get_db)
+):
+    """Sync Clerk user to local database"""
+    user = db.query(User).filter(User.clerk_id == clerk_data["id"]).first()
+    
+    if not user:
+        # Create new user
+        new_user = User(
+            clerk_id=clerk_data["id"],
+            email=clerk_data["email_addresses"][0]["email_address"],
+            username=clerk_data["username"],
+            is_active=True
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        return new_user
+    
+    return user
+
 
 @router.get("/", response_model=List[User])
 def read_users(

@@ -9,7 +9,7 @@ import json
 # Constants
 UPLOAD_DIR = "uploads/photos"
 THUMBNAIL_DIR = "uploads/thumbnails"
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".svg"}
 THUMBNAIL_SIZE = (300, 300)
 
 

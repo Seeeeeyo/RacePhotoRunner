@@ -3,9 +3,10 @@
 import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/clerk-auth';
-import { createEvent } from '@/lib/api';
+import { createEvent, uploadEventCoverImage } from '@/lib/api';
 import { toast } from 'sonner';
 import Image from 'next/image';
+import { Slider } from '@/components/ui/slider';
 
 export default function CreateEventPage() {
   const { isAuthenticated, isLoading, isPhotographer, user, getAuthHeaders } = useAuth();
@@ -17,7 +18,9 @@ export default function CreateEventPage() {
     eventName: '',
     eventDate: '',
     location: '',
-    description: ''
+    description: '',
+    slug: '',
+    price_per_photo: 5.00
   });
   
   // Handle input changes for text fields
@@ -26,6 +29,14 @@ export default function CreateEventPage() {
     setFormData(prev => ({
       ...prev,
       [name]: value
+    }));
+  };
+
+  // Handle price slider change
+  const handleSliderChange = (value: number[]) => {
+    setFormData(prev => ({
+      ...prev,
+      price_per_photo: value[0]
     }));
   };
 
@@ -47,41 +58,64 @@ export default function CreateEventPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     
-    if (!formData.eventName || !formData.eventDate) {
-      toast.error('Event name and date are required');
+    if (!formData.eventName || !formData.eventDate || !formData.slug) {
+      toast.error('Event name, date, and slug are required');
       return;
     }
     
+    // Validate price (assuming you add a price field to formData)
+    // Example: Ensure price is within range $1-$15
+    const priceInCents = formData.price_per_photo * 100; // Convert dollars to cents
+    if (priceInCents < 100 || priceInCents > 1500) {
+      toast.error('Price must be between $1.00 and $15.00');
+      return;
+    }
+
     setIsSubmitting(true);
     
     try {
-      const formDataObj = new FormData();
-      formDataObj.append('name', formData.eventName);
-      formDataObj.append('date', formData.eventDate);
-      formDataObj.append('location', formData.location);
-      formDataObj.append('description', formData.description);
-      
-      // Get cover image from file input
-      const fileInput = document.getElementById('coverImage') as HTMLInputElement;
-      if (fileInput?.files?.[0]) {
-        formDataObj.append('cover_image', fileInput.files[0]);
-      } else {
-        // Optional: Handle case where no cover image is provided
-        // toast.info('No cover image selected.');
-      }
-      
+      // --- Create a plain JS object for the JSON payload --- 
+      const eventData = {
+        name: formData.eventName,
+        date: `${formData.eventDate}T00:00:00Z`, // Append time and timezone indicator
+        location: formData.location,
+        description: formData.description,
+        slug: formData.slug,
+        is_active: true, // Default or get from form state
+        price_per_photo: priceInCents, // Use the validated price in cents
+      };
+
       const headers = await getAuthHeaders();
-      const result = await createEvent(formDataObj, headers);
-      
+      // --- Pass the plain object to createEvent --- 
+      const result = await createEvent(eventData, headers || {});
+
+      // --- Separate Cover Image Upload --- 
+      const fileInput = document.getElementById('coverImage') as HTMLInputElement;
+      const coverImageFile = fileInput?.files?.[0];
+
+      if (result && coverImageFile) {
+        // If event creation was successful and there's a file, upload it
+        const imageFormData = new FormData();
+        imageFormData.append('cover_image', coverImageFile);
+        try {
+          await uploadEventCoverImage(result.id, imageFormData, headers || {});
+          toast.info('Cover image uploaded successfully.');
+        } catch (uploadError) {
+          console.error("Cover image upload failed:", uploadError);
+          toast.warning("Event created, but cover image upload failed. You can upload it later.");
+        }
+      }
+
       if (result) {
         toast.success('Event created successfully!');
         router.push('/photographer/events');
       } else {
-        throw new Error('Failed to create event');
+        throw new Error('Failed to create event'); // Should not happen if API returns data
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating event:', error);
-      toast.error('Failed to create event. Please try again.');
+      const errorMessage = error?.response?.data?.detail || 'Failed to create event. Please try again.';
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -197,6 +231,23 @@ export default function CreateEventPage() {
             </div>
             
             <div>
+              <label htmlFor="slug" className="block text-sm font-medium text-gray-700">
+                Event Slug
+              </label>
+              <input
+                type="text"
+                id="slug"
+                name="slug"
+                value={formData.slug}
+                onChange={handleTextChange}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                placeholder="e.g., boston-marathon-2023 (unique, lowercase, no spaces)"
+                required
+              />
+              <p className="mt-1 text-xs text-gray-500">Unique identifier for the event URL (lowercase, numbers, hyphens).</p>
+            </div>
+            
+            <div>
               <label htmlFor="description" className="block text-sm font-medium text-gray-700">
                 Description
               </label>
@@ -209,6 +260,24 @@ export default function CreateEventPage() {
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 placeholder="Provide details about the event"
               />
+            </div>
+
+            {/* Price Slider Input */}
+            <div>
+              <label htmlFor="price" className="block text-sm font-medium text-gray-700">
+                Price Per Photo: ${formData.price_per_photo.toFixed(2)}
+              </label>
+              <Slider
+                id="price"
+                name="price_per_photo"
+                min={0.00} // Minimum price $0.50
+                max={15.00} // Maximum price $20.00 (adjust as needed)
+                step={0.50} // Increment by $0.50
+                value={[formData.price_per_photo]}
+                onValueChange={handleSliderChange}
+                className="mt-2"
+              />
+               <p className="mt-1 text-xs text-gray-500">Set the price customers will pay for each photo download.</p>
             </div>
             
             <div>

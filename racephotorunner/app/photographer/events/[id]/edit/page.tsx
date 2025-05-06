@@ -133,7 +133,7 @@ export default function EditEventPage() {
 
   if (isLoading) {
     return (
-      <AdminLayout>
+      <AdminLayout title="Loading Event...">
         <div className="flex items-center justify-center min-h-screen">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
         </div>
@@ -142,7 +142,7 @@ export default function EditEventPage() {
   }
 
   return (
-    <AdminLayout>
+    <AdminLayout title="Edit Event">
       <div className="max-w-4xl mx-auto py-8 px-4">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Edit Event</h1>

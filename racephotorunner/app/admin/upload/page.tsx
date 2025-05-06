@@ -1,16 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/lib/auth';
-import { fetchEvents, uploadPhoto, EventSummary } from '@/lib/api';
+import { fetchEvents, fetchEvent, uploadPhoto, EventSummary } from '@/lib/api';
 import AdminLayout from '@/components/AdminLayout';
 
 export default function AdminUploadPage() {
   const { isAuthenticated, isLoading, isAdmin, user, getAuthHeaders } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
@@ -21,6 +22,7 @@ export default function AdminUploadPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [previews, setPreviews] = useState<string[]>([]);
+  const [urlEventId, setUrlEventId] = useState<string | null>(null);
 
   // Cleanup previews on unmount
   useEffect(() => {
@@ -54,6 +56,48 @@ export default function AdminUploadPage() {
       loadEvents();
     }
   }, [isLoading, isAuthenticated, isAdmin, router]);
+
+  useEffect(() => {
+    // Read eventId from URL query parameters
+    const eventIdFromUrl = searchParams.get('eventId');
+    if (eventIdFromUrl) {
+      setUrlEventId(eventIdFromUrl);
+      
+      // Check if the event is already in the loaded events list
+      if (events.find(e => e.id.toString() === eventIdFromUrl)) {
+        setSelectedEvent(eventIdFromUrl);
+      } else {
+        // If not in the list, fetch the specific event by ID
+        const fetchSpecificEvent = async () => {
+          try {
+            const eventData = await fetchEvent(parseInt(eventIdFromUrl));
+            if (eventData) {
+              // Create an EventSummary from the fetched event data
+              const eventSummary: EventSummary = {
+                id: eventData.id,
+                name: eventData.name,
+                date: eventData.date,
+                location: eventData.location,
+                slug: eventData.slug,
+                photo_count: eventData.photo_count || 0,
+                cover_image_url: eventData.cover_image_url
+              };
+              
+              // Add this event to the events list
+              setEvents(prevEvents => [eventSummary, ...prevEvents]);
+              setSelectedEvent(eventIdFromUrl);
+            } else {
+              console.warn(`Event ID ${eventIdFromUrl} could not be found.`);
+            }
+          } catch (error) {
+            console.error(`Error fetching event ID ${eventIdFromUrl}:`, error);
+          }
+        };
+        
+        fetchSpecificEvent();
+      }
+    }
+  }, [searchParams, events]);
 
   const handleEventChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedEvent(e.target.value);
@@ -191,13 +235,15 @@ export default function AdminUploadPage() {
                 id="event"
                 value={selectedEvent}
                 onChange={handleEventChange}
-                className="mt-1 block w-full rounded-lg border border-gray-300 dark:border-gray-600 
+                disabled={!!urlEventId}
+                className={`mt-1 block w-full rounded-lg border border-gray-300 dark:border-gray-600 
                 bg-gray-50 dark:bg-gray-700 
                 text-gray-900 dark:text-white 
                 px-4 py-2
                 focus:ring-2 focus:ring-blue-500 focus:border-transparent
                 hover:border-blue-300 dark:hover:border-blue-500
-                transition-colors duration-200"
+                transition-colors duration-200
+                ${!!urlEventId ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed' : ''}`}
               >
                 <option value="">-- Select an event --</option>
                 {events.map((event) => (

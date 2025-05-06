@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Edit, Eye } from 'lucide-react';
+import { Edit, Eye, Upload } from 'lucide-react';
 import { fetchEvents, EventSummary } from '@/lib/api';
 import AdminLayout from '@/components/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -102,19 +102,28 @@ export default function EventsPage() {
                     <div className="flex space-x-3">
                       <Button
                         variant="secondary"
-                        onClick={() => router.push(`/admin/events/${event.id}/edit`)}
-                        className="text-gray-700 hover:text-gray-900 border-gray-300 flex items-center gap-2"
+                        asChild
                       >
-                        <Edit className="h-4 w-4" />
-                        Edit
+                        <Link href={`/photographer/events/${event.id}/edit`}>
+                          <Edit className="h-4 w-4 mr-2" /> Edit
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="default"
+                        asChild
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        <Link href={`/admin/upload?eventId=${event.id}`}>
+                          <Upload className="h-4 w-4 mr-2" /> Upload Photos
+                        </Link>
                       </Button>
                       <Button
                         variant="secondary"
-                        onClick={() => router.push(`/events/${event.id}`)}
-                        className="text-gray-700 hover:text-gray-900 border-gray-300 flex items-center gap-2"
+                        asChild
                       >
-                        <Eye className="h-4 w-4" />
-                        View
+                        <Link href={`/events/${event.id}`}>
+                          <Eye className="h-4 w-4 mr-2" /> View
+                        </Link>
                       </Button>
                     </div>
                   </div>

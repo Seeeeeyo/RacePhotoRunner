@@ -15,7 +15,7 @@ class EventBase(BaseModel):
 
 # Properties to receive via API when creating an event
 class EventCreate(EventBase):
-    pass
+    price_per_photo: Optional[int] = Field(default=500, ge=100, le=1500) # Price in cents, default $5, range $1-$15
 
 
 # Properties to receive via API when updating an event

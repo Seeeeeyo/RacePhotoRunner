@@ -136,12 +136,12 @@ export default function SearchPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between mb-6">
+        {/* <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-gray-800">Search Photos</h1>
           <Link href="/">
-            <Button variant="default">Back to Home</Button>
+            <Button variant="secondary" className="bg-gray-200 hover:bg-gray-300 text-gray-800">Back to Home</Button>
           </Link>
-        </div>
+        </div> */}
 
         <div className="bg-white rounded-xl shadow-md p-6 mb-8">
           {errorMessage && (
@@ -165,14 +165,14 @@ export default function SearchPage() {
               <Button
                 variant={searchType === "bib" ? "default" : "outline"}
                 onClick={() => setSearchType("bib")}
-                className={`flex-1 sm:flex-none ${searchType === "bib" ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-gray-700 dark:text-gray-200"}`}
+                className={`flex-1 sm:flex-none ${searchType === "bib" ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-gray-700 dark:text-gray-200 border border-gray-300"}`}
               >
                 Bib Number
               </Button>
               <Button
                 variant={searchType === "event" ? "default" : "outline"}
                 onClick={() => setSearchType("event")}
-                className={`flex-1 sm:flex-none ${searchType === "event" ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-gray-700 dark:text-gray-200"}`}
+                className={`flex-1 sm:flex-none ${searchType === "event" ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-gray-700 dark:text-gray-200 border border-gray-300"}`}
               >
                 Event
               </Button>
@@ -228,7 +228,7 @@ export default function SearchPage() {
               <Button
                 onClick={handleSearch}
                 disabled={isLoading}
-                className="w-full"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {isLoading ? (
                   <>

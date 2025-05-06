@@ -90,15 +90,19 @@ export function PopupProvider({ children }: { children: React.ReactNode }) {
       
       {/* Alert Dialog */}
       <Dialog open={alertOpen} onOpenChange={setAlertOpen}>
-        <DialogContent className="sm:max-w-[350px] bg-gray-100">
+        <DialogContent className="bg-white border shadow-lg sm:max-w-lg p-6">
           <DialogHeader>
-            <DialogTitle className="text-black">
+            <DialogTitle className="text-gray-900 text-lg font-semibold">
               {alertTitle}
             </DialogTitle>
-            <DialogDescription className="text-gray-800">{alertMessage}</DialogDescription>
+            <DialogDescription className="text-gray-700 text-sm mt-2">
+              {alertMessage}
+            </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button onClick={() => setAlertOpen(false)} className="bg-gray-800 hover:bg-gray-900 text-white">OK</Button>
+          <DialogFooter className="flex justify-end mt-4">
+            <Button onClick={() => setAlertOpen(false)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
+              OK
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

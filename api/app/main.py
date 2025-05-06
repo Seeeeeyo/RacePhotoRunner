@@ -8,10 +8,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app.database import engine, Base
-from app.routers import auth, users, events, photos, bib_detection, admin
+from app.routers import auth, users, events, photos, bib_detection, admin, payments
 
 # Create tables if they don't exist
-Base.metadata.create_all(bind=engine)
+# Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="RacePhotoRunner API",
@@ -22,7 +22,7 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["http://localhost:3000"], # In production, replace with specific origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -35,6 +35,7 @@ app.include_router(events.router, prefix="/api")
 app.include_router(photos.router, prefix="/api")
 app.include_router(bib_detection.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(payments.router, prefix="/api")
 
 # Ensure upload directories exist
 os.makedirs("uploads/photos", exist_ok=True)

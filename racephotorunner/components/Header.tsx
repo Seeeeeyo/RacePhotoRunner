@@ -147,8 +147,8 @@ export default function Header() {
                   </p>
                   {user?.role && (
                     <p className={`mt-1 inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                      user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                      user.role === 'photographer' ? 'bg-green-100 text-green-800' : 
+                      user.role === 'admin' ? 'bg-purple-100 text-blue-800' :
+                      user.role === 'photographer' ? 'bg-purple-100 text-blue-800' : 
                       'bg-blue-100 text-blue-800'
                     }`}>
                       {user.role.charAt(0).toUpperCase() + user.role.slice(1)}

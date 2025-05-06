@@ -1,35 +1,13 @@
 // API client for RacePhotoRunner backend
 // This file contains functions to interact with the backend API
 
-// Make sure the API base URL is correct
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
-
-// Helper function to ensure proper URL construction
-function buildApiUrl(path: string): string {
-  // Remove any leading slash from the path
-  const cleanPath = path.startsWith('/') ? path.substring(1) : path;
-  
-  // If API_BASE_URL already has /api at the end, just append the path
-  if (API_BASE_URL.endsWith('/api')) {
-    return `${API_BASE_URL}/${cleanPath}`;
-  }
-  
-  // If API_BASE_URL has /api/ at the end, just append the path
-  if (API_BASE_URL.endsWith('/api/')) {
-    return `${API_BASE_URL}${cleanPath}`;
-  }
-  
-  // If API_BASE_URL doesn't have /api, add it
-  if (!API_BASE_URL.includes('/api')) {
-    const baseWithoutTrailingSlash = API_BASE_URL.endsWith('/') 
-      ? API_BASE_URL.slice(0, -1) 
-      : API_BASE_URL;
-    return `${baseWithoutTrailingSlash}/api/${cleanPath}`;
-  }
-  
-  // Default case: just join with a slash
-  return `${API_BASE_URL.endsWith('/') ? API_BASE_URL : API_BASE_URL + '/'}${cleanPath}`;
-}
+// Ensure the API base URL *always* includes /api
+const RAW_API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = RAW_API_BASE_URL.endsWith('/api') 
+    ? RAW_API_BASE_URL 
+    : RAW_API_BASE_URL.endsWith('/') 
+        ? `${RAW_API_BASE_URL}api` 
+        : `${RAW_API_BASE_URL}/api`;
 
 // Types
 export interface EventSummary {
@@ -71,7 +49,7 @@ export interface PhotoSearchResult {
 // API functions
 export async function fetchEvents(): Promise<EventSummary[]> {
   try {
-    const response = await fetch(buildApiUrl('events'));
+    const response = await fetch(API_BASE_URL + '/events');
     
     if (!response.ok) {
       throw new Error(`Error fetching events: ${response.status}`);
@@ -86,7 +64,7 @@ export async function fetchEvents(): Promise<EventSummary[]> {
 
 export async function fetchEvent(id: number): Promise<Event | null> {
   try {
-    const response = await fetch(buildApiUrl(`events/${id}`));
+    const response = await fetch(API_BASE_URL + `/events/${id}`);
     
     if (!response.ok) {
       throw new Error(`Error fetching event: ${response.status}`);
@@ -101,7 +79,7 @@ export async function fetchEvent(id: number): Promise<Event | null> {
 
 export async function fetchEventPhotos(eventId: number, skip = 0, limit = 50): Promise<Photo[]> {
   try {
-    const response = await fetch(buildApiUrl(`events/${eventId}/photos?skip=${skip}&limit=${limit}`));
+    const response = await fetch(API_BASE_URL + `/events/${eventId}/photos?skip=${skip}&limit=${limit}`);
     
     if (!response.ok) {
       throw new Error(`Error fetching photos: ${response.status}`);
@@ -116,7 +94,7 @@ export async function fetchEventPhotos(eventId: number, skip = 0, limit = 50): P
 
 export async function searchPhotosByBib(bibNumber: string): Promise<PhotoSearchResult[]> {
   try {
-    const response = await fetch(buildApiUrl(`photos/search?bib_number=${encodeURIComponent(bibNumber)}`));
+    const response = await fetch(API_BASE_URL + `/photos/search?bib_number=${encodeURIComponent(bibNumber)}`);
     
     if (!response.ok) {
       throw new Error(`Error searching photos: ${response.status}`);
@@ -129,34 +107,48 @@ export async function searchPhotosByBib(bibNumber: string): Promise<PhotoSearchR
   }
 }
 
-export async function createEvent(eventData: FormData, authHeaders: Record<string, string>): Promise<Event | null> {
+export const createEvent = async (eventData: Record<string, any>, headers: HeadersInit) => {
+  // Construct URL relative to the guaranteed API base URL
+  const url = `${API_BASE_URL}/events/`; 
+  console.log("POSTing Event Data to URL:", url);
+  console.log("Event Data:", JSON.stringify(eventData)); // Log data being sent
   try {
-    const response = await fetch(buildApiUrl('events'), {
+    const response = await fetch(url, { // Use the explicitly constructed URL
       method: 'POST',
       headers: {
-        ...authHeaders
+        ...headers,
+        'Content-Type': 'application/json',
       },
-      body: eventData
+      body: JSON.stringify(eventData),
     });
-    
+
     if (!response.ok) {
+      let errorDetail = 'Failed to create event';
+      try {
+        const errorData = await response.json();
+        errorDetail = errorData.detail || errorDetail;
+      } catch (e) { /* Ignore if response is not JSON */ }
+      console.error(`Error creating event: ${response.status} ${errorDetail}`);
       throw new Error(`Error creating event: ${response.status}`);
     }
-    
-    return await response.json();
+
+    const responseBody = await response.text();
+    if (!responseBody) {
+        return null;
+    }
+    return JSON.parse(responseBody);
+
   } catch (error) {
-    console.error('Error creating event:', error);
-    return null;
+    console.error('Error in createEvent:', error);
+    throw error;
   }
 }
 
-export async function uploadPhoto(photoData: FormData, authHeaders: Record<string, string>): Promise<Photo | null> {
+export async function uploadPhoto(photoData: FormData, authHeaders: HeadersInit | undefined): Promise<Photo | null> {
   try {
-    const response = await fetch(buildApiUrl('photos/upload'), {
+    const response = await fetch(API_BASE_URL + '/photos/upload', {
       method: 'POST',
-      headers: {
-        ...authHeaders
-      },
+      headers: authHeaders || {},
       body: photoData
     });
     
@@ -180,7 +172,7 @@ export async function createEventJson(eventData: {
   slug: string;
 }): Promise<Event | null> {
   try {
-    const response = await fetch(buildApiUrl('events'), {
+    const response = await fetch(API_BASE_URL + '/events', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -207,7 +199,7 @@ export async function login(username: string, password: string): Promise<{ acces
     formData.append('username', username);
     formData.append('password', password);
 
-    const response = await fetch(buildApiUrl('auth/token'), {
+    const response = await fetch(API_BASE_URL + '/auth/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -228,7 +220,7 @@ export async function login(username: string, password: string): Promise<{ acces
 
 export async function register(userData: { username: string, email: string, password: string }): Promise<any | null> {
   try {
-    const response = await fetch(buildApiUrl('auth/register'), {
+    const response = await fetch(API_BASE_URL + '/auth/register', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -249,7 +241,7 @@ export async function register(userData: { username: string, email: string, pass
 
 export async function getCurrentUser(authHeaders: Record<string, string>): Promise<any | null> {
   try {
-    const response = await fetch(buildApiUrl('auth/me'), {
+    const response = await fetch(API_BASE_URL + '/auth/me', {
       headers: {
         ...authHeaders
       }
@@ -268,7 +260,7 @@ export async function getCurrentUser(authHeaders: Record<string, string>): Promi
 
 export async function updateEvent(eventId: number, eventData: FormData): Promise<Event | null> {
   try {
-    const response = await fetch(buildApiUrl(`events/${eventId}`), {
+    const response = await fetch(API_BASE_URL + `/events/${eventId}`, {
       method: 'PUT',
       body: eventData
     });
@@ -300,4 +292,35 @@ export function getFullImageUrl(path: string | null | undefined): string {
   
   // Join API base URL with path
   return `${baseUrl}${normalizedPath}`;
-} 
+}
+
+// Function to upload event cover image
+export const uploadEventCoverImage = async (eventId: number, formData: FormData, headers: HeadersInit) => {
+  // Construct URL relative to the guaranteed API base URL
+  const url = `${API_BASE_URL}/events/${eventId}/cover-image`;
+  console.log("POSTing Cover Image to URL:", url);
+  try {
+    const response = await fetch(url, { // Use the explicitly constructed URL
+      method: 'POST',
+      headers: {
+        ...headers, // Pass existing auth headers, Content-Type will be set by browser for FormData
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorDetail = 'Failed to upload cover image';
+      try {
+        const errorData = await response.json();
+        errorDetail = errorData.detail || errorDetail;
+      } catch (e) { /* Ignore if response is not JSON */ }
+      console.error(`Error uploading cover image: ${response.status} ${errorDetail}`);
+      throw new Error(`Error uploading cover image: ${response.status}`);
+    }
+
+    return await response.json(); // Assuming the endpoint returns the updated event
+  } catch (error) {
+    console.error('Error in uploadEventCoverImage:', error);
+    throw error; // Re-throw the error for the calling component to handle
+  }
+}; 
