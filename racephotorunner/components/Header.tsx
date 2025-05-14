@@ -52,10 +52,8 @@ export default function Header() {
               <div className="h-5 w-5 border-t-2 border-blue-500 rounded-full animate-spin"></div>
             ) : isAuthenticated ? (
               <div className="ml-3 relative flex items-center space-x-4">
-                {user?.role && (
+                {user?.role && user.role !== 'admin' && user.role !== 'photographer' && (
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                    user.role === 'photographer' ? 'bg-green-100 text-green-800' : 
                     'bg-blue-100 text-blue-800'
                   }`}>
                     {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
@@ -66,15 +64,15 @@ export default function Header() {
                     onClick={() => router.push(Routes.ADMIN_DASHBOARD)}
                     className="px-3 py-2 rounded-md text-sm font-medium bg-amber-100 text-amber-800 hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500"
                   >
-                    Admin
+                    Dashboard
                   </button>
                 )}
                 {isPhotographer && (
                   <button 
-                    onClick={() => router.push(Routes.PHOTOGRAPHER_EVENT_CREATE)}
+                    onClick={() => router.push(Routes.PHOTOGRAPHER_DASHBOARD)}
                     className="px-3 py-2 rounded-md text-sm font-medium bg-green-100 text-green-800 hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                   >
-                    Create Event
+                    Dashboard
                   </button>
                 )}
                 <UserButton afterSignOutUrl={Routes.HOME} />
@@ -145,10 +143,8 @@ export default function Header() {
                   <p className="text-sm font-medium text-gray-500">
                     {user?.email}
                   </p>
-                  {user?.role && (
+                  {user?.role && user.role !== 'admin' && user.role !== 'photographer' && (
                     <p className={`mt-1 inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                      user.role === 'admin' ? 'bg-purple-100 text-blue-800' :
-                      user.role === 'photographer' ? 'bg-purple-100 text-blue-800' : 
                       'bg-blue-100 text-blue-800'
                     }`}>
                       {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
@@ -163,18 +159,18 @@ export default function Header() {
                     }}
                     className="block w-full text-left px-4 py-2 text-base font-medium bg-amber-50 text-amber-800"
                   >
-                    Admin Dashboard
+                    Dashboard
                   </button>
                 )}
                 {isPhotographer && (
                   <button 
                     onClick={() => {
-                      router.push(Routes.PHOTOGRAPHER_EVENT_CREATE);
+                      router.push(Routes.PHOTOGRAPHER_DASHBOARD);
                       setMobileMenuOpen(false);
                     }}
                     className="block w-full text-left px-4 py-2 text-base font-medium bg-green-50 text-green-800"
                   >
-                    Create Event
+                    Dashboard
                   </button>
                 )}
                 <div className="px-4 py-2">

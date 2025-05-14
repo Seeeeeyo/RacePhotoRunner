@@ -3,7 +3,7 @@
 import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/clerk-auth';
-import { createEvent } from '@/lib/api';
+import { createEventJson, uploadEventCoverImage, Event as ApiEvent } from '@/lib/api';
 import { toast } from 'sonner';
 import Image from 'next/image';
 
@@ -13,9 +13,10 @@ export default function CreateEventPage() {
   const [unauthorized, setUnauthorized] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [formData, setFormData] = useState({
-    eventName: '',
-    eventDate: '',
+    name: '',
+    date: '',
     location: '',
     description: ''
   });
@@ -33,12 +34,14 @@ export default function CreateEventPage() {
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setCoverImageFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreviewUrl(reader.result as string);
       }
       reader.readAsDataURL(file);
     } else {
+      setCoverImageFile(null);
       setImagePreviewUrl(null);
     }
   };
@@ -47,7 +50,7 @@ export default function CreateEventPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     
-    if (!formData.eventName || !formData.eventDate) {
+    if (!formData.name || !formData.date) {
       toast.error('Event name and date are required');
       return;
     }
@@ -55,33 +58,53 @@ export default function CreateEventPage() {
     setIsSubmitting(true);
     
     try {
-      const formDataObj = new FormData();
-      formDataObj.append('name', formData.eventName);
-      formDataObj.append('date', formData.eventDate);
-      formDataObj.append('location', formData.location);
-      formDataObj.append('description', formData.description);
-      
-      // Get cover image from file input
-      const fileInput = document.getElementById('coverImage') as HTMLInputElement;
-      if (fileInput?.files?.[0]) {
-        formDataObj.append('cover_image', fileInput.files[0]);
-      } else {
-        // Optional: Handle case where no cover image is provided
-        // toast.info('No cover image selected.');
-      }
-      
       const headers = await getAuthHeaders();
-      const result = await createEvent(formDataObj, headers);
       
-      if (result) {
-        toast.success('Event created successfully!');
-        router.push('/admin/events');
-      } else {
-        throw new Error('Failed to create event');
+      // Generate slug from event name
+      const generatedSlug = formData.name
+        .toLowerCase()
+        .replace(/\s+/g, '-') // Replace spaces with hyphens
+        .replace(/[^\w-]+/g, ''); // Remove non-alphanumeric characters (except hyphens)
+
+      // Prepare event data for JSON submission
+      const eventPayload = {
+        name: formData.name,
+        date: formData.date,
+        location: formData.location,
+        description: formData.description,
+        is_active: true, // Default to active, or add to form
+        slug: generatedSlug, // Add generated slug
+        // price_per_photo will use backend default if not sent
+      };
+
+      // Step 1: Create the event with metadata
+      const createdEvent: ApiEvent | null = await createEventJson(eventPayload, headers);
+      
+      if (!createdEvent || !createdEvent.id) {
+        throw new Error('Failed to create event or event ID missing.');
       }
+
+      toast.success('Event metadata created successfully!');
+
+      // Step 2: If there's a cover image, upload it
+      if (coverImageFile) {
+        const imageFormData = new FormData();
+        imageFormData.append('cover_image', coverImageFile);
+        
+        const imageUploadResult = await uploadEventCoverImage(createdEvent.id, imageFormData, headers);
+        if (imageUploadResult) {
+          toast.success('Cover image uploaded successfully!');
+        } else {
+          toast.warn('Event created, but failed to upload cover image.');
+        }
+      }
+      
+      router.push('/admin/events');
+
     } catch (error) {
       console.error('Error creating event:', error);
-      toast.error('Failed to create event. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+      toast.error(`Failed to create event: ${errorMessage}. Please try again.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -151,14 +174,14 @@ export default function CreateEventPage() {
           
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="eventName" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
                 Event Name
               </label>
               <input
                 type="text"
-                id="eventName"
-                name="eventName"
-                value={formData.eventName}
+                id="name"
+                name="name"
+                value={formData.name}
                 onChange={handleTextChange}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 placeholder="e.g., Boston Marathon 2023"
@@ -167,14 +190,14 @@ export default function CreateEventPage() {
             </div>
             
             <div>
-              <label htmlFor="eventDate" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="date" className="block text-sm font-medium text-gray-700">
                 Event Date
               </label>
               <input
                 type="date"
-                id="eventDate"
-                name="eventDate"
-                value={formData.eventDate}
+                id="date"
+                name="date"
+                value={formData.date}
                 onChange={handleTextChange}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 required

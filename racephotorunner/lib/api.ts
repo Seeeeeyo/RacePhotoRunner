@@ -177,19 +177,34 @@ export async function createEventJson(eventData: {
   description: string;
   is_active: boolean;
   slug: string;
-}): Promise<Event | null> {
+}, headers: HeadersInit): Promise<Event | null> {
   try {
-    const response = await fetch(API_BASE_URL + '/events', {
+    const response = await fetch(API_BASE_URL + '/events/', {
       method: 'POST',
       headers: {
+        ...headers,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(eventData)
     });
     
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `Error creating event: ${response.status}`);
+      let errorDetail = `Error creating event: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (errorData && errorData.detail) {
+            if (Array.isArray(errorData.detail)) {
+                errorDetail = errorData.detail.map(err => err.msg || JSON.stringify(err)).join(', ');
+            } else if (typeof errorData.detail === 'string') {
+                errorDetail = errorData.detail;
+            }
+        } else {
+             errorDetail = `Error creating event: ${response.status} - ${await response.text()}`;
+        }
+      } catch (e) { 
+        errorDetail = `Error creating event: ${response.status} - ${response.statusText}`;
+      }
+      throw new Error(errorDetail);
     }
     
     return await response.json();

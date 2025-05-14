@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/lib/auth';
-import AdminLayout from '@/components/AdminLayout';
+import { useAuth } from '@/lib/clerk-auth';
+import { toast } from 'sonner';
+import { EventSummary } from '@/lib/api';
 
 // Type definition for activity item
 interface ActivityItem {
@@ -15,103 +16,57 @@ interface ActivityItem {
   photo_id?: number;
 }
 
-export default function AdminDashboard() {
-  const { isAuthenticated, isLoading, isAdmin, user, logout } = useAuth();
+export default function PhotographerDashboard() {
+  const { isAuthenticated, isLoading, isPhotographer, user, getAuthHeaders } = useAuth();
   const router = useRouter();
-  const [stats, setStats] = useState({
-    totalEvents: 0,
-    totalPhotos: 0,
-    searchesToday: 0,
-  });
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [isLoadingStats, setIsLoadingStats] = useState(true);
-  const [isLoadingActivities, setIsLoadingActivities] = useState(true);
+  const [events, setEvents] = useState<EventSummary[]>([]);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(true);
 
   useEffect(() => {
-    // Only admin users should access this page
-    if (!isLoading && (!isAuthenticated || !isAdmin)) {
-      router.push('/signin?redirect=/admin/dashboard');
+    // Page for authenticated photographers
+    if (!isLoading && !isAuthenticated) {
+      router.push('/signin?redirect=/photographer/dashboard');
+    } else if (!isLoading && isAuthenticated && !isPhotographer) {
+      // If authenticated but not a photographer, redirect to home or a generic dashboard
+      // Or show an "Access Denied" message if they somehow landed here without being a photographer
+      toast.error("Access Denied: This page is for photographers only.");
+      router.push('/'); 
     }
-  }, [isLoading, isAuthenticated, isAdmin, router]);
+  }, [isLoading, isAuthenticated, isPhotographer, router]);
 
   useEffect(() => {
-    // Fetch stats from API
-    if (isAuthenticated && isAdmin) {
-      const fetchStats = async () => {
+    const fetchPhotographerEvents = async () => {
+      if (isAuthenticated && isPhotographer) {
+        setIsLoadingEvents(true);
         try {
-          setIsLoadingStats(true);
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/admin/stats`, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              // Temporarily disable auth for development
-              // 'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            setStats({
-              totalEvents: data.total_events || 0,
-              totalPhotos: data.total_photos || 0,
-              searchesToday: data.searches_today || 0,
-            });
-          } else {
-            console.error('Failed to fetch statistics');
+          const headers = await getAuthHeaders();
+          if (!headers) {
+            toast.error("Authentication error. Please try signing in again.");
+            setIsLoadingEvents(false);
+            // Optionally redirect to sign-in if headers are missing, though useAuth should handle this
+            // router.push('/signin?redirect=/photographer/dashboard');
+            return;
           }
-        } catch (error) {
-          console.error('Error fetching statistics:', error);
-        } finally {
-          setIsLoadingStats(false);
-        }
-      };
-      
-      const fetchActivity = async () => {
-        try {
-          setIsLoadingActivities(true);
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/admin/recent-activity`, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              // Temporarily disable auth for development
-              // 'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            setActivities(data);
-          } else {
-            console.error('Failed to fetch activity');
-          }
-        } catch (error) {
-          console.error('Error fetching activity:', error);
-        } finally {
-          setIsLoadingActivities(false);
-        }
-      };
-      
-      fetchStats();
-      fetchActivity();
-    }
-  }, [isAuthenticated, isAdmin]);
 
-  // Helper function to format timestamps
-  const formatTime = (timestamp: string): string => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-    
-    if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
-    
-    return date.toLocaleDateString();
-  };
+          const response = await fetch('/api/photographer/events', { headers });
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: "Failed to fetch events" }));
+            throw new Error(errorData.detail || `Error: ${response.status}`);
+          }
+          const data: EventSummary[] = await response.json();
+          setEvents(data);
+        } catch (error) {
+          console.error("Failed to fetch photographer events:", error);
+          toast.error(error instanceof Error ? error.message : "Could not load your events.");
+        }
+        setIsLoadingEvents(false);
+      }
+    };
+
+    if (!isLoading) { // Only fetch once auth state is resolved
+        fetchPhotographerEvents();
+    }
+  }, [isAuthenticated, isPhotographer, isLoading, getAuthHeaders, router]);
 
   if (isLoading) {
     return (
@@ -121,178 +76,88 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!isAuthenticated || !isAdmin) {
-    return null; // Will be redirected by useEffect
+  if (!isAuthenticated || !isPhotographer) {
+    // This case should ideally be handled by the useEffect redirect,
+    // but as a fallback, prevent rendering the admin content.
+    // You might want a more specific loading/error state or redirect here too.
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center">
+        <p>Redirecting or checking authentication...</p>
+        {/* Optionally, you can add a more user-friendly message or a specific component for non-photographers */}
+      </div>
+    );
   }
 
+  // Placeholder for Photographer Dashboard Content
   return (
-    <AdminLayout title="Admin Dashboard">
-      <div className="px-4 py-6 sm:px-0">
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Event Management Card */}
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 bg-blue-500 rounded-md p-3">
-                  <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <div className="ml-5">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900">Manage Events</h3>
-                  <p className="mt-2 text-sm text-gray-500">
-                    Create, edit, and manage race events
-                  </p>
-                </div>
-              </div>
-              <div className="mt-6">
-                <Link
-                  href="/admin/events"
-                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Manage Events
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          {/* Photo Upload Card */}
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 bg-green-500 rounded-md p-3">
-                  <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <div className="ml-5">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900">Upload Photos</h3>
-                  <p className="mt-2 text-sm text-gray-500">
-                    Upload and manage race photos
-                  </p>
-                </div>
-              </div>
-              <div className="mt-6">
-                <Link
-                  href="/admin/upload"
-                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                >
-                  Upload Photos
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          {/* Analytics Card */}
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 bg-purple-500 rounded-md p-3">
-                  <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-                <div className="ml-5">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900">Analytics</h3>
-                  <p className="mt-2 text-sm text-gray-500">
-                    View user and photo statistics
-                  </p>
-                </div>
-              </div>
-              <div className="mt-6">
-                <Link
-                  href="/admin/analytics"
-                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
-                >
-                  View Analytics
-                </Link>
-              </div>
-            </div>
+    // <AppLayout title="Photographer Dashboard">
+    <div className="min-h-screen bg-gray-100">
+      <header className="bg-white shadow py-6 px-4 sm:px-6 lg:px-8 mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Photographer Dashboard</h1>
+        {user?.email && <p className="text-gray-600 mt-1">Welcome, {user.email}</p>}
+      </header>
+      
+      <div className="px-4 sm:px-6 lg:px-8">
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold text-gray-700 mb-4">Dashboard Quick Actions</h2>
+          <p className="text-gray-600 mb-6">
+            Manage your events and photos.
+          </p>
+          <div className="flex flex-wrap space-x-0 sm:space-x-4 space-y-4 sm:space-y-0">
+            <Link href="/photographer/events/create" className="inline-block px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow hover:bg-blue-700 transition-colors w-full sm:w-auto text-center">
+              Create New Event
+            </Link>
+            <Link href="/photographer/upload" className="inline-block px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow hover:bg-green-700 transition-colors w-full sm:w-auto text-center">
+              Upload Photos
+            </Link>
           </div>
         </div>
 
-        {/* Quick Stats */}
-        <div className="mt-8 bg-white overflow-hidden shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">Overview</h3>
-            <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
-              <div className="px-4 py-5 bg-gray-50 shadow rounded-lg overflow-hidden sm:p-6">
-                <dt className="text-sm font-medium text-gray-500 truncate">Total Events</dt>
-                <dd className="mt-1 text-3xl font-semibold text-gray-900">
-                  {isLoadingStats ? (
-                    <div className="h-8 w-16 bg-gray-200 animate-pulse rounded"></div>
-                  ) : (
-                    stats.totalEvents
-                  )}
-                </dd>
-              </div>
-              <div className="px-4 py-5 bg-gray-50 shadow rounded-lg overflow-hidden sm:p-6">
-                <dt className="text-sm font-medium text-gray-500 truncate">Total Photos</dt>
-                <dd className="mt-1 text-3xl font-semibold text-gray-900">
-                  {isLoadingStats ? (
-                    <div className="h-8 w-16 bg-gray-200 animate-pulse rounded"></div>
-                  ) : (
-                    stats.totalPhotos
-                  )}
-                </dd>
-              </div>
-              <div className="px-4 py-5 bg-gray-50 shadow rounded-lg overflow-hidden sm:p-6">
-                <dt className="text-sm font-medium text-gray-500 truncate">Searches Today</dt>
-                <dd className="mt-1 text-3xl font-semibold text-gray-900">
-                  {isLoadingStats ? (
-                    <div className="h-8 w-16 bg-gray-200 animate-pulse rounded"></div>
-                  ) : (
-                    stats.searchesToday
-                  )}
-                </dd>
+        {/* Display Events */}
+        <div className="mt-8">
+          <h2 className="text-2xl font-semibold text-gray-800 mb-4">Your Events</h2>
+          {isLoadingEvents ? (
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <p className="text-gray-500">Loading your events...</p>
+              {/* Optional: Add a spinner or shimmer effect here */}
+              <div className="mt-4 space-y-3">
+                <div className="h-8 bg-gray-200 rounded animate-pulse w-3/4"></div>
+                <div className="h-8 bg-gray-200 rounded animate-pulse w-1/2"></div>
+                <div className="h-8 bg-gray-200 rounded animate-pulse w-2/3"></div>
               </div>
             </div>
-          </div>
-        </div>
-        
-        {/* Recent Activity */}
-        <div className="mt-8 bg-white overflow-hidden shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">Recent Activity</h3>
-            <div className="mt-5">
-              {isLoadingActivities ? (
-                <div className="space-y-4">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className="animate-pulse flex space-x-4">
-                      <div className="flex-1 space-y-2 py-1">
-                        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                        <div className="h-4 bg-gray-200 rounded w-5/6"></div>
-                      </div>
-                    </div>
-                  ))}
+          ) : events.length > 0 ? (
+            <div className="bg-white p-6 rounded-lg shadow-md divide-y divide-gray-200">
+              {events.map((event) => (
+                <div key={event.id} className="py-4">
+                  <h3 className="text-lg font-medium text-blue-600 hover:underline">
+                    <Link href={`/photographer/events/${event.id}/edit`}>{event.name}</Link> {/* TODO: Link to event manage/edit page */}
+                  </h3>
+                  <p className="text-sm text-gray-500">{event.location} - {new Date(event.date).toLocaleDateString()}</p>
+                  <p className="text-sm text-gray-500 mt-1">Photos: {event.photo_count}</p>
+                  {/* Add more event details or action buttons here e.g. Upload photos to this event, Edit event */}
+                  <div className="mt-3">
+                     <Link href={`/photographer/events/${event.id}/upload`} className="text-sm text-green-600 hover:text-green-800 font-medium">
+                       Upload Photos to Event
+                     </Link>
+                     <Link href={`/photographer/events/${event.id}/edit`} className="ml-4 text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+                       Edit Event
+                     </Link>
+                  </div>
                 </div>
-              ) : activities.length > 0 ? (
-                <ul className="divide-y divide-gray-200">
-                  {activities.map((activity, index) => (
-                    <li key={index} className="py-4">
-                      <div className="flex space-x-3">
-                        <div className="flex-1 space-y-1">
-                          <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-medium">
-                              {activity.type === 'photo_upload' ? 'Photos uploaded' : 
-                               activity.type === 'event_created' ? 'New event created' :
-                               'Activity'}
-                            </h3>
-                            <p className="text-sm text-gray-500">{formatTime(activity.timestamp)}</p>
-                          </div>
-                          <p className="text-sm text-gray-500">{activity.description}</p>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-gray-500 py-4">No recent activity to display</p>
-              )}
+              ))}
             </div>
-          </div>
+          ) : (
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <p className="text-gray-500">You haven't created any events yet.</p>
+              <Link href="/photographer/events/create" className="mt-4 inline-block px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow hover:bg-blue-700 transition-colors">
+                Create Your First Event
+              </Link>
+            </div>
+          )}
         </div>
       </div>
-    </AdminLayout>
+    </div>
+    // </AppLayout>
   );
 } 

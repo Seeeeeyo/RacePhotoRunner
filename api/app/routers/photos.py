@@ -6,12 +6,20 @@ import os
 from PIL import Image, ImageDraw, ImageFont
 import io
 import json
+import logging
 
 from app.database import get_db
 from app.schemas.photo import Photo, PhotoCreate, PhotoUpdate, PhotoSummary, PhotoSearchResult
 from app.utils.auth import get_current_active_user, get_current_admin_user
 from app.utils.file import save_upload_file, is_valid_image
 from app.utils.bib_detection import bib_detector
+from app.utils.person_clip_utils import generate_and_prepare_person_embeddings
+from app.utils.faiss_utils import save_faiss_index
+
+# Configure logger for this module
+logger = logging.getLogger(__name__)
+# Ensure basicConfig is called, ideally in main.py or a central logging setup
+# If not already configured: logging.basicConfig(level=logging.INFO)
 
 router = APIRouter(prefix="/photos", tags=["photos"])
 
@@ -65,70 +73,114 @@ async def upload_photo(
     
     # If no user is found, use a default admin user
     if not photographer_id:
-        # Fetch the first admin or first user in the database
         admin = db.query(UserModel).filter(UserModel.role == "admin").first()
         if admin:
             photographer_id = admin.id
         else:
-            # Last resort - get any user
             first_user = db.query(UserModel).first()
             if first_user:
                 photographer_id = first_user.id
             else:
-                # If no users exist, create a system user
                 system_user = UserModel(
-                    username="system",
-                    email="system@example.com",
-                    is_active=True,
-                    role="admin"
+                    username="system", email="system@example.com", is_active=True, role="admin"
                 )
                 db.add(system_user)
                 db.commit()
                 db.refresh(system_user)
                 photographer_id = system_user.id
     
-    # Create directories if they don't exist
     os.makedirs("uploads/photos", exist_ok=True)
     os.makedirs("uploads/thumbnails", exist_ok=True)
     
-    # Generate unique filename
     unique_id = str(uuid.uuid4())
     file_extension = os.path.splitext(photo.filename)[1]
     photo_filename = f"{unique_id}{file_extension}"
     
-    # Define paths
     photo_path = f"/uploads/photos/{photo_filename}"
     thumbnail_path = f"/uploads/thumbnails/{photo_filename}"
     
-    # Save file to disk
-    file_path = f"uploads/photos/{photo_filename}"
-    with open(file_path, "wb") as f:
-        content = await photo.read()
-        f.write(content)
-    
-    # Create a copy for thumbnail (in a real app, you'd resize it)
+    file_path = f"uploads/photos/{photo_filename}" # Full path on disk for processing
+    try:
+        with open(file_path, "wb") as f:
+            content = await photo.read()
+            f.write(content)
+        logger.info(f"Photo saved to disk at {file_path}")
+    except Exception as e:
+        logger.error(f"Failed to save photo to disk: {e}")
+        raise HTTPException(status_code=500, detail=f"Could not save photo file: {e}")
+
     import shutil
     shutil.copy(file_path, f"uploads/thumbnails/{photo_filename}")
     
-    # Detect bib numbers using Gemini
     detected_bibs = await bib_detector.detect_bib_numbers(file_path)
-    bib_numbers = ','.join(map(str, detected_bibs)) if detected_bibs else None
+    bib_numbers_str = ','.join(map(str, detected_bibs)) if detected_bibs else None
     
-    # Create database record
     new_photo = PhotoModel(
         event_id=event_id,
         filename=photo.filename,
         path=photo_path,
         thumbnail_path=thumbnail_path,
-        photographer_id=photographer_id,  # Add photographer_id
-        bib_numbers=bib_numbers,
+        photographer_id=photographer_id,
+        bib_numbers=bib_numbers_str,
         is_public=True
+        # body_embedding_path is not set here directly anymore if we link via PersonEmbedding table
     )
     
-    db.add(new_photo)
-    db.commit()
-    db.refresh(new_photo)
-    
+    try:
+        db.add(new_photo)
+        db.commit()
+        db.refresh(new_photo)
+        logger.info(f"Photo record created in DB with ID: {new_photo.id}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to create photo record in DB: {e}")
+        # Clean up saved file if DB record creation fails?
+        if os.path.exists(file_path):
+             os.unlink(file_path)
+        if os.path.exists(f"uploads/thumbnails/{photo_filename}"):
+             os.unlink(f"uploads/thumbnails/{photo_filename}")
+        raise HTTPException(status_code=500, detail=f"Could not save photo metadata: {e}")
+
+    # --- Generate and Save Person Embeddings ---
+    try:
+        logger.info(f"Starting person embedding generation for photo ID: {new_photo.id}, path: {file_path}")
+        # Removed await as the function is synchronous
+        embeddings_prepared_count = generate_and_prepare_person_embeddings(
+            image_path=file_path, 
+            photo=new_photo, 
+            db=db
+        )
+        
+        if embeddings_prepared_count > 0:
+            logger.info(f"{embeddings_prepared_count} person embeddings prepared for photo ID: {new_photo.id}. Committing to DB.")
+            db.commit() # Commit PersonEmbedding records
+            logger.info(f"Person embeddings for photo ID: {new_photo.id} committed to DB.")
+            
+            logger.info(f"Attempting to save FAISS index after adding embeddings for photo ID: {new_photo.id}")
+            if save_faiss_index():
+                logger.info(f"FAISS index saved successfully after processing photo ID: {new_photo.id}.")
+            else:
+                logger.warning(f"Failed to save FAISS index after processing photo ID: {new_photo.id}. Index might be stale.")
+        elif embeddings_prepared_count == 0:
+            logger.info(f"No person embeddings were generated or prepared for photo ID: {new_photo.id}.")
+        # If embeddings_prepared_count is < 0, it would be an error code, but our function returns int >= 0
+
+    except Exception as e:
+        # This is a critical error during embedding generation/saving. 
+        # The photo record already exists. We should log this clearly.
+        # A rollback here might undo the PersonEmbedding additions if any were made before an error 
+        # in generate_and_prepare_person_embeddings, but the function itself handles db.add_all internally.
+        # If generate_and_prepare_person_embeddings raises an error before db.add_all, nothing is added to session.
+        # If it adds to session then raises error before returning, then a rollback here would be good.
+        # However, our current util returns 0 on failure and logs internally.
+        db.rollback() # Rollback any potential PersonEmbedding additions if the util had partial success before erroring
+        logger.error(f"Error during person embedding generation or FAISS saving for photo ID {new_photo.id}: {e}")
+        # Not raising HTTPException here as photo is already uploaded. This is a background processing failure.
+        # Consider a background task system for more robust handling of this step.
+
+    # Prepare response (ensure all fields from Photo schema are present)
+    # Refresh new_photo again in case PersonEmbedding processing changed related fields (though unlikely now)
+    db.refresh(new_photo) 
     return {
         "id": new_photo.id,
         "event_id": new_photo.event_id,
@@ -136,10 +188,10 @@ async def upload_photo(
         "path": new_photo.path,
         "thumbnail_path": new_photo.thumbnail_path,
         "bib_numbers": new_photo.bib_numbers,
-        "has_face": new_photo.has_face,
-        "face_embedding_path": new_photo.face_embedding_path,
-        "body_embedding_path": new_photo.body_embedding_path,
-        "metadata": new_photo.metadata,
+        "has_face": new_photo.has_face, # This field isn't updated by current flow
+        "face_embedding_path": new_photo.face_embedding_path, # Not updated
+        "body_embedding_path": new_photo.body_embedding_path, # Not updated by this flow anymore; person embeddings are separate
+        "metadata": new_photo.photo_metadata,
         "timestamp": new_photo.timestamp.isoformat() if new_photo.timestamp else None,
         "is_public": new_photo.is_public,
         "created_at": new_photo.created_at.isoformat() if new_photo.created_at else None,
@@ -439,8 +491,6 @@ async def report_untag(
         raise HTTPException(status_code=400, detail="Photo ID and bib number are required")
     
     # Log the report (in a production app, you would save to database)
-    import logging
-    logger = logging.getLogger("api")
     logger.info(f"Untag report received - Photo ID: {photo_id}, Bib: {bib_number}, Reason: {reason}")
     
     # Return confirmation
